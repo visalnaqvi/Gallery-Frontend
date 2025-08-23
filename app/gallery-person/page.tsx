@@ -1,0 +1,244 @@
+"use client";
+
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import Image from "next/image";
+import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
+import "react-image-gallery/styles/css/image-gallery.css";
+import GalleryGrid from "@/components/gallery/grid";
+import { ImageItem } from "@/types/ImageItem";
+
+export default function GroupGallery() {
+    const searchParams = useSearchParams();
+    const groupId = searchParams.get("groupId");
+    const personId = searchParams.get("personId");
+
+    const [isOpen, setIsOpen] = useState(false);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [images, setImages] = useState<ImageItem[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const loadedImagesRef = useRef<Set<string>>(new Set());
+
+    // ✅ Preload images
+    const preloadImage = useCallback((src: string) => {
+        if (loadedImagesRef.current.has(src)) return Promise.resolve();
+
+        return new Promise<void>((resolve, reject) => {
+            const img = new window.Image();
+            img.onload = () => {
+                loadedImagesRef.current.add(src);
+                resolve();
+            };
+            img.onerror = reject;
+            img.src = src;
+        });
+    }, []);
+
+    // ✅ Fetch all images once
+    const fetchImages = useCallback(async () => {
+        if (!groupId || loading) return;
+        setLoading(true);
+
+        try {
+            const res = await fetch(
+                `/api/persons/getPerson?groupId=${groupId}&personId=${personId}`
+            );
+            const data: ImageItem[] = await res.json();
+
+            setImages(data);
+            data.forEach((image) => preloadImage(image.compressed_location));
+        } catch (err) {
+            console.error("Failed to fetch images", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [groupId, personId, preloadImage]);
+
+    useEffect(() => {
+        fetchImages();
+    }, [fetchImages]);
+
+    // ✅ Close on Esc
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setIsOpen(false);
+        };
+        if (isOpen) {
+            document.addEventListener("keydown", handleEsc);
+            document.body.style.overflow = "hidden";
+        }
+        return () => {
+            document.removeEventListener("keydown", handleEsc);
+            document.body.style.overflow = "unset";
+        };
+    }, [isOpen]);
+
+    // ✅ Open carousel
+    const handleImageClick = useCallback(
+        (idx: number) => {
+            setCurrentIndex(idx);
+            setIsOpen(true);
+
+            const indicesToPreload = [idx - 2, idx - 1, idx, idx + 1, idx + 2].filter(
+                (i) => i >= 0 && i < images.length
+            );
+            indicesToPreload.forEach((i) =>
+                preloadImage(images[i].compressed_location)
+            );
+        },
+        [images, preloadImage]
+    );
+
+    // ✅ Gallery items
+    const galleryItems: ReactImageGalleryItem[] = useMemo(
+        () =>
+            images.map((image) => ({
+                original: image.compressed_location,
+                thumbnail: image.thumbnail_location,
+                loading: "lazy" as const,
+                originalAlt: "Gallery image",
+                thumbnailAlt: "Gallery thumbnail",
+            })),
+        [images]
+    );
+    const downloadCompressed = useCallback(async () => {
+        try {
+            // Fetch the actual file as blob
+            const fileResp = await fetch(images[currentIndex].compressed_location);
+            const blob = await fileResp.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = images[currentIndex].filename || "image.jpg";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download failed:', error);
+        }
+    }, [images, currentIndex]);
+
+    // Download original image via backend proxy
+    const downloadOriginal = useCallback(async () => {
+        try {
+            const response = await fetch('/api/images/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: images[currentIndex].id,
+                })
+            });
+
+            const { downloadUrl } = await response.json();
+            const fileResp = await fetch(downloadUrl);
+            const blob = await fileResp.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = images[currentIndex].filename || "image.jpg";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download failed:', error);
+        }
+    }, [images, currentIndex]);
+    if (!groupId) return <p>No groupId provided in URL</p>;
+
+    return (
+        <>
+            {/* Grid */}
+            <GalleryGrid handleImageClick={handleImageClick} images={images} />
+
+            {loading && (
+                <div className="text-center py-8">
+                    <div className="inline-flex items-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
+                        Loading images...
+                    </div>
+                </div>
+            )}
+
+            {/* Fullscreen carousel */}
+            {isOpen && (
+                <div className="fixed inset-0 bg-black z-50">
+                    <button
+                        onClick={() => setIsOpen(false)}
+                        className="absolute top-4 right-4 z-50 text-white text-3xl hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center"
+                        aria-label="Close gallery"
+                    >
+                        ×
+                    </button>
+                    <div className="absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+                        {currentIndex + 1} / {images.length}
+                    </div>
+
+                    {/* Download buttons positioned in bottom right */}
+                    <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
+                        <button
+                            onClick={downloadCompressed}
+                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors duration-200 shadow-lg"
+                        >
+                            Download Compressed
+                        </button>
+                        <button
+                            onClick={downloadOriginal}
+                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                        >
+                            Download Original
+                        </button>
+                    </div>
+                    <div className="absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+                        {currentIndex + 1} / {images.length}
+                    </div>
+
+                    <div className="h-full flex flex-col">
+                        <div className="flex-1 relative">
+                            <ImageGallery
+                                items={galleryItems}
+                                startIndex={currentIndex}
+                                showThumbnails={false}
+                                showFullscreenButton={false}
+                                showPlayButton={false}
+                                showBullets={false}
+                                lazyLoad={false}
+                                showNav={true}
+                                slideDuration={300}
+                                slideInterval={0}
+                                onSlide={(index) => {
+                                    setCurrentIndex(index);
+                                    const indicesToPreload = [index - 1, index, index + 1].filter(
+                                        (i) => i >= 0 && i < images.length
+                                    );
+                                    indicesToPreload.forEach((i) =>
+                                        preloadImage(images[i].compressed_location)
+                                    );
+                                }}
+                                renderItem={(item) => (
+                                    <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center">
+                                        <Image
+                                            src={item.original}
+                                            alt={item.originalAlt || ""}
+                                            fill
+                                            className="object-contain"
+                                            priority={false}
+                                        />
+                                    </div>
+                                )}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
