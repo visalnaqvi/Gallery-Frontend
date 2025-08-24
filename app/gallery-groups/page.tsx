@@ -1,22 +1,24 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css";
 import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
-
+import { useUser } from '@/context/UserContext';
+import { GridLoader } from "react-spinners";
 type ApiResponse = {
     images: ImageItem[];
     hasMore: boolean;
+    hotImages: number;
 };
 
 export default function GroupGallery() {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
-
+    const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [images, setImages] = useState<ImageItem[]>([]);
@@ -26,7 +28,8 @@ export default function GroupGallery() {
     const LOAD_MORE_AHEAD = 10;
     const [sorting, setSorting] = useState<string>("date_taken")
     const loaderRef = useRef<HTMLDivElement | null>(null);
-
+    const [hotImages, setHotImages] = useState(0)
+    const { setGroupId } = useUser()
     // ✅ Use refs for cache + preloaded images (no re-render)
     const loadedImagesRef = useRef<Set<string>>(new Set());
     const cache = useRef<{
@@ -69,7 +72,7 @@ export default function GroupGallery() {
             setImages((prev) => [...prev, ...data.images]);
             setHasMore(data.hasMore);
             setPage((prev) => prev + 1);
-
+            setHotImages(data.hotImages)
             data.images.forEach((image) => preloadImage(image.compressed_location));
         } catch (err) {
             console.error("Failed to fetch images", err);
@@ -227,6 +230,7 @@ export default function GroupGallery() {
 
     if (!groupId) return <p>No groupId provided in URL</p>;
 
+
     // ✅ Stable gallery items
     const galleryItems: ReactImageGalleryItem[] = useMemo(
         () =>
@@ -239,10 +243,31 @@ export default function GroupGallery() {
             })),
         [images]
     );
-
+    if (hotImages == 0 && images.length == 0) return <div className="p-4 m-4 bg-blue-100 ">
+        <p className="text-blue-800 font-semibold rounded-[10px]">No Images in this group</p>
+        <button onClick={() => {
+            setGroupId(parseInt(groupId))
+            router.push('/upload')
+        }} className="p-2 bg-blue-700 text-white rounded text-sm font-semibold mt-4">Upload Images</button>
+    </div>;
     return (
         <>
             {/* Grid */}
+            {hotImages > 0 && (
+                <div className="m-4 p-4 bg-blue-100">
+                    <div className="inline-flex items-center">
+                        <GridLoader
+                            className="mr-4"
+                            size={10}
+                            color="#2b7fff"
+                            aria-label="Loading Spinner"
+                            data-testid="loader"
+                        />
+                        <p className="text-blue-600 font-semibold">Your recent uploaded {hotImages} images are being processed and will be available shortly...</p>
+                    </div>
+                </div>
+            )}
+
             <GalleryGrid handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
 
             {loading && (

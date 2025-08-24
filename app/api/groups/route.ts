@@ -35,14 +35,29 @@ export async function GET(req: NextRequest) {
     }
 
     const groupQuery = await client.query(
-      `SELECT id, name,profile_pic_location, total_images, total_size, admin_user, last_image_uploaded_at, status
+      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status
        FROM groups
        WHERE id = ANY($1)`,
       [groupIds]
     );
 
     client.release();
-    return NextResponse.json({ groups: groupQuery.rows }, { status: 200 });
+
+    const formattedRows = groupQuery.rows.map((row) => ({
+      id: row.id,
+      name:row.name , 
+      profile_pic_bytes: row.profile_pic_bytes
+        ? `data:image/jpeg;base64,${Buffer.from(row.profile_pic_bytes).toString("base64")}`
+        : "",
+        total_images:row.total_images,
+        total_size:row.total_size,
+        admin_user:row.admin_user,
+        last_image_uploaded_at:row.last_image_uploaded_at,
+        status:row.status
+
+    }));
+
+    return NextResponse.json({ groups: formattedRows }, { status: 200 });
   } catch (err) {
     console.error('Error fetching groups:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -51,8 +66,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, userId } = body;
-
+  const { name, userId , profile_pic_bytes , access , planType } = body;
+  let profilePicBuffer = null;
+if (profile_pic_bytes) {
+  // If it's an array of numbers (e.g. [255, 216, 255, ...])
+  if (Array.isArray(profile_pic_bytes)) {
+    profilePicBuffer = Buffer.from(profile_pic_bytes);
+  }
+  // If it's an object with numeric keys (e.g. {0:255, 1:216,...})
+  else {
+    profilePicBuffer = Buffer.from(Object.values(profile_pic_bytes));
+  }
+}
   if (!name || !userId) {
     return NextResponse.json({ error: 'Invalid group name or userId' }, { status: 400 });
   }
@@ -61,10 +86,10 @@ export async function POST(req: NextRequest) {
     const client = await pool.connect();
 
     const result = await client.query(
-      `INSERT INTO groups (name, admin_user, status, total_images, total_size)
-       VALUES ($1, $2, 'heating', 0, 0)
+      `INSERT INTO groups (name, admin_user, status, total_images, total_size , plan_type , access , profile_pic_bytes , created_at)
+       VALUES ($1, $2, 'heating', 0, 0 , $3 , $4 , $5 , NOW())
        RETURNING id`,
-      [name, userId]
+      [name, userId , planType , access , profilePicBuffer]
     );
 
     await client.query(

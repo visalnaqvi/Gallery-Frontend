@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
-    const sorting = searchParams.get("sorting");
+    const sorting = searchParams.get("sorting") || "uploaded_at"; // fallback
     const page = parseInt(searchParams.get("page") || "0", 10);
     const limit = 10;
     const offset = page * limit;
@@ -56,19 +56,29 @@ export async function GET(req: NextRequest) {
     const client = await pool.connect();
     
     try {
-  
-          console.log("ftching not personid")
-           const result = await client.query(
-  `
-    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time 
-    FROM images 
-    WHERE group_id = $1 and status != 'hot'
-    ORDER BY ${sorting} DESC
-    LIMIT $2 OFFSET $3
-  `,
-  [groupId, limit + 1, offset] // only values go in params
-);
-      
+      console.log("Fetching images (not hot) + hot count");
+
+      // fetch paginated images (excluding hot)
+      const result = await client.query(
+        `
+          SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status 
+          FROM images 
+          WHERE group_id = $1 AND status != 'hot'
+          ORDER BY ${sorting} DESC
+          LIMIT $2 OFFSET $3
+        `,
+        [groupId, limit + 1, offset] // only values go in params
+      );
+
+      // fetch hot image count
+      const hotResult = await client.query(
+        `SELECT COUNT(*)::int AS hot_count 
+         FROM images 
+         WHERE group_id = $1 AND status = 'hot'`,
+        [groupId]
+      );
+
+      const hotImages = hotResult.rows[0]?.hot_count || 0;
 
       const rows = result.rows;
       const hasMore = rows.length > limit;
@@ -83,14 +93,13 @@ export async function GET(req: NextRequest) {
 
           // if missing or expired, refresh immediately (await so response has URL)
           if (!signedUrl || !expireTime || expireTime < new Date()) {
-            // generate fresh signed url immediately
-            const refreshed = await refreshSignedUrl(img.id); // now does DB update in background
+            const refreshed = await refreshSignedUrl(img.id); 
             if (refreshed) {
               signedUrl = refreshed.signedUrl;
               expireTime = refreshed.expireTime;
             }
           } else {
-            // if close to expiry, refresh in background (don’t block response)
+            // if close to expiry, refresh in background
             const timeLeft = expireTime.getTime() - Date.now();
             if (timeLeft < 15 * 60 * 1000) {
               refreshSignedUrl(img.id); // fire and forget
@@ -112,12 +121,11 @@ export async function GET(req: NextRequest) {
         })
       );
 
-      // run background refreshes (don’t block API)
       Promise.all(refreshTasks).then(() =>
         console.log(`✅ Background refresh done for ${refreshTasks.length} URLs`)
       );
 
-      return NextResponse.json({ images, hasMore });
+      return NextResponse.json({ images, hasMore, hotImages });
     } finally {
       client.release();
     }

@@ -4,12 +4,14 @@ import { storage } from '@/lib/firebaseClient';
 import {
     ref,
     uploadBytesResumable,
-    getDownloadURL,
+    UploadTask,
 } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import pLimit from 'p-limit';
 import { useUser } from '@/context/UserContext';
+import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 
 interface ImageMeta {
     id: string;
@@ -19,26 +21,21 @@ interface ImageMeta {
     uploaded_at: string;
 }
 
-interface Props {
-    userId: string;
-    groupId: string;
-}
-
 export default function ImageUploader() {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [filesMeta, setFilesMeta] = useState<ImageMeta[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadedCount, setUploadedCount] = useState(0);
     const uploadCounter = useRef(0);
-    const cancelRef = useRef(false);
-    const { userId, groupId } = useUser()
+    const { groupId: groupIdFromContext } = useUser();
+    const { data: session } = useSession();
+    const searchParams = useSearchParams();
 
-    useEffect(() => {
-        console.log("user id", userId)
-        console.log("GROUP id", userId)
-    }), [userId, groupId]
+    // check groupId from URL first, fallback to context
+    const groupId = searchParams.get("groupId") || groupIdFromContext;
 
-
+    // keep active tasks so we can cancel them
+    const activeTasks = useRef<UploadTask[]>([]);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files;
@@ -50,12 +47,16 @@ export default function ImageUploader() {
         setSelectedFiles(validFiles);
         setFilesMeta([]);
         setUploadedCount(0);
-        cancelRef.current = false;
+        uploadCounter.current = 0;
+        activeTasks.current = []; // reset task list
     };
 
     const updateProgress = () => {
         uploadCounter.current += 1;
-        if (uploadCounter.current % 5 === 0 || uploadCounter.current === selectedFiles.length) {
+        if (
+            uploadCounter.current % 5 === 0 ||
+            uploadCounter.current === selectedFiles.length
+        ) {
             setUploadedCount(uploadCounter.current);
         }
     };
@@ -66,7 +67,13 @@ export default function ImageUploader() {
             return;
         }
 
+        if (!groupId) {
+            alert('No groupId available.');
+            return;
+        }
+
         setUploading(true);
+
         try {
             const res = await fetch('/api/groups', {
                 method: 'PATCH',
@@ -81,7 +88,6 @@ export default function ImageUploader() {
                 setUploading(false);
                 return;
             }
-
             console.log('Group status updated to heating');
         } catch (error) {
             console.error('Error updating group status:', error);
@@ -93,31 +99,41 @@ export default function ImageUploader() {
         const results: ImageMeta[] = [];
 
         const uploadTasks = selectedFiles.map((file) =>
-            limit(async () => {
-                if (cancelRef.current) return null;
+            limit(() => {
+                return new Promise<ImageMeta | null>((resolve) => {
+                    try {
+                        const uuid = uuidv4();
+                        const timestamp = new Date().toISOString();
+                        const filePath = `${uuid}`;
+                        const fileRef = ref(storage, filePath);
 
-                try {
-                    const uuid = uuidv4();
-                    const timestamp = new Date().toISOString();
-                    const filePath = `${uuid}`;
-                    const fileRef = ref(storage, filePath);
+                        const task = uploadBytesResumable(fileRef, file);
+                        activeTasks.current.push(task);
 
-                    const uploadTask = await uploadBytesResumable(fileRef, file);
-
-                    const meta: ImageMeta = {
-                        id: uuid,
-                        location: null,
-                        filename: file.name,
-                        size: file.size,
-                        uploaded_at: timestamp,
-                    };
-
-                    updateProgress();
-                    return meta;
-                } catch (error) {
-                    console.error(`Upload failed for ${file.name}:`, error);
-                    return null; // Skip this file
-                }
+                        task.on(
+                            'state_changed',
+                            undefined, // we don’t track per-file %
+                            (error) => {
+                                console.error(`Upload failed for ${file.name}:`, error);
+                                resolve(null);
+                            },
+                            async () => {
+                                const meta: ImageMeta = {
+                                    id: uuid,
+                                    location: null,
+                                    filename: file.name,
+                                    size: file.size,
+                                    uploaded_at: timestamp,
+                                };
+                                updateProgress();
+                                resolve(meta);
+                            }
+                        );
+                    } catch (err) {
+                        console.error(`Error starting upload for ${file.name}:`, err);
+                        resolve(null);
+                    }
+                });
             })
         );
 
@@ -135,7 +151,11 @@ export default function ImageUploader() {
                     const res = await fetch('/api/update-image-upload-status', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId, groupId, images: chunk }),
+                        body: JSON.stringify({
+                            userId: session?.user?.id,
+                            groupId,
+                            images: chunk
+                        }),
                     });
 
                     if (!res.ok) {
@@ -155,11 +175,29 @@ export default function ImageUploader() {
         }
 
         setUploading(false);
+        setSelectedFiles([]);
+        setFilesMeta([]);
+        setUploadedCount(0);
+        uploadCounter.current = 0;
+        activeTasks.current = [];
     };
 
     const handleCancel = () => {
-        cancelRef.current = true;
+        // cancel all ongoing firebase uploads
+        activeTasks.current.forEach((task) => {
+            try {
+                task.cancel();
+            } catch (err) {
+                console.error('Error cancelling task:', err);
+            }
+        });
+        activeTasks.current = [];
+
         setUploading(false);
+        setSelectedFiles([]);
+        setFilesMeta([]);
+        setUploadedCount(0);
+        uploadCounter.current = 0;
     };
 
     return (

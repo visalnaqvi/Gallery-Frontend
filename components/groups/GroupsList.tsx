@@ -5,27 +5,30 @@ import CreateGroupModal from './CreateGroupModal';
 import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
 import styles from "./styles.module.css"
-import Image from 'next/image';
+import { useSession } from "next-auth/react";
+
+
 interface Group {
-    id: string;
+    id: number;
     name: string;
     total_images: number;
     total_size: number;
     admin_user: string;
-    last_image_added_at: string;
-    profile_pic_location: string;
+    last_image_uploaded_at: string;
+    profile_pic_bytes: string;
 }
 
-export default function GroupsList({ userId }: { userId: string }) {
+export default function GroupsList() {
     const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const { setUserId, setGroupId } = useUser()
+    const { setGroupId } = useUser()
     const router = useRouter()
+    const { data: session } = useSession();
     async function fetchGroups() {
         try {
             setLoading(true);
-            const res = await fetch(`/api/groups?userId=${userId}`);
+            const res = await fetch(`/api/groups?userId=${session?.user?.id}`);
             const data = await res.json();
             setGroups(data.groups || []);
         } catch (err) {
@@ -60,21 +63,20 @@ export default function GroupsList({ userId }: { userId: string }) {
                     {groups.map(group => (
                         <li key={group.id} className={styles.groupCard}>
                             {
-                                group.profile_pic_location == undefined || group.profile_pic_location == null || group.profile_pic_location == "" ?
+                                group.profile_pic_bytes == undefined || group.profile_pic_bytes == null || group.profile_pic_bytes == "" ?
                                     <div className={styles.groupImage}>
                                         <div className={styles.innerWordWrapper} onClick={() => {
                                             router.push("/gallery-groups?groupId=" + group.id)
                                         }}>{group.name.charAt(0)}</div>
                                     </div> : <div className={styles.cardThumWrapper} onClick={() => {
                                         router.push("/gallery-groups?groupId=" + group.id)
-                                    }}><Image className={styles.img} src={group.profile_pic_location} alt="group image" fill></Image></div>
+                                    }}><img className={styles.img} src={group.profile_pic_bytes} alt="group image"></img></div>
                             }
                             <div className={styles.groupDetails}>
                                 <p className={styles.groupName}>{group.name}</p>
                                 <p className={styles.groupData}>Images: {group.total_images}</p>
-                                {group.admin_user == userId && <div className={styles.adminPanel}>
+                                {group.admin_user == session?.user?.id && <div className={styles.adminPanel}>
                                     <button className={styles.uploadBtn} onClick={() => {
-                                        setUserId(userId)
                                         setGroupId(group.id)
                                         router.push("/upload")
                                     }}>Upload Images</button>
@@ -87,9 +89,9 @@ export default function GroupsList({ userId }: { userId: string }) {
                 </ul>
             )}
 
-            {showModal && (
+            {showModal && session?.user?.id && (
                 <CreateGroupModal
-                    userId={userId}
+                    userId={session?.user?.id}
                     onClose={() => setShowModal(false)}
                     onGroupCreated={fetchGroups}
                 />
