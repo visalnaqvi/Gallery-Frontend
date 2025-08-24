@@ -23,7 +23,8 @@ export default function GroupGallery() {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
-    const LOAD_MORE_AHEAD = 5;
+    const LOAD_MORE_AHEAD = 10;
+    const [sorting, setSorting] = useState<string>("date_taken")
     const loaderRef = useRef<HTMLDivElement | null>(null);
 
     // ✅ Use refs for cache + preloaded images (no re-render)
@@ -62,7 +63,7 @@ export default function GroupGallery() {
         setLoading(true);
 
         try {
-            const res = await fetch(`/api/groups/images?groupId=${groupId}&page=${page}`);
+            const res = await fetch(`/api/groups/images?groupId=${groupId}&page=${page}&sorting=${sorting}`);
             const data: ApiResponse = await res.json();
 
             setImages((prev) => [...prev, ...data.images]);
@@ -76,8 +77,10 @@ export default function GroupGallery() {
             setLoading(false);
             cache.current.loadingStates.set(requestKey, false);
         }
-    }, [groupId, page, hasMore, loading, preloadImage]);
-
+    }, [groupId, page, hasMore, loading, preloadImage, sorting]);
+    useEffect(() => {
+        console.log("sorting changed to ", sorting)
+    })
     // Helper function to download from Firebase URL with CORS handling
     const downloadFromFirebaseUrl = useCallback(async (url: string, filename: string) => {
         try {
@@ -163,7 +166,9 @@ export default function GroupGallery() {
         cache.current.pages.clear();
         cache.current.allImages.clear();
         cache.current.loadingStates.clear();
-    }, [groupId]);
+
+        fetchImages();
+    }, [groupId, sorting]);
 
 
     // ✅ Infinite scroll observer
@@ -208,7 +213,7 @@ export default function GroupGallery() {
             setCurrentIndex(idx);
             setIsOpen(true);
 
-            const indicesToPreload = [idx - 2, idx - 1, idx, idx + 1, idx + 2].filter(
+            const indicesToPreload = [idx - 10, idx - 9, idx - 8, idx - 7, idx - 6, idx - 5, idx - 4, idx - 3, idx - 2, idx - 1, idx, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5, idx + 6, idx + 7, idx + 8, idx + 9, idx + 10].filter(
                 (i) => i >= 0 && i < images.length
             );
             indicesToPreload.forEach((i) => preloadImage(images[i].compressed_location));
@@ -238,7 +243,7 @@ export default function GroupGallery() {
     return (
         <>
             {/* Grid */}
-            <GalleryGrid handleImageClick={handleImageClick} images={images} />
+            <GalleryGrid handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
 
             {loading && (
                 <div className="text-center py-8">
@@ -318,6 +323,8 @@ export default function GroupGallery() {
                                             fill
                                             className="object-contain"
                                             priority={false}
+                                            loading="eager"   // eagerly load visible image
+                                            unoptimized
                                         />
                                     </div>
                                 )}

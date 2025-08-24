@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
+    const sorting = searchParams.get("sorting");
     const page = parseInt(searchParams.get("page") || "0", 10);
     const limit = 10;
     const offset = page * limit;
@@ -57,14 +58,16 @@ export async function GET(req: NextRequest) {
     try {
   
           console.log("ftching not personid")
-           const result=await client.query(
-        `SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time 
-         FROM images 
-         WHERE group_id = $1 
-         ORDER BY uploaded_at DESC
-         LIMIT $2 OFFSET $3`,
-        [groupId , limit + 1, offset] // fetch one extra to check hasMore
-      )
+           const result = await client.query(
+  `
+    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time 
+    FROM images 
+    WHERE group_id = $1 and status != 'hot'
+    ORDER BY ${sorting} DESC
+    LIMIT $2 OFFSET $3
+  `,
+  [groupId, limit + 1, offset] // only values go in params
+);
       
 
       const rows = result.rows;

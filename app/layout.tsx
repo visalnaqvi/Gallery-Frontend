@@ -53,7 +53,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   People
                 </button>
               )}
-
+              {pathname.startsWith("/gallery") && groupId && (
+                <button
+                  onClick={() => handleNavigate(`/similar-faces?groupId=${groupId}`)}
+                  className="px-4 py-2 bg-white text-blue-500 rounded-lg shadow hover:bg-gray-100"
+                >
+                  Similar Faces
+                </button>
+              )}
               {/* Show Images button if on persons page OR personId exists */}
               {(pathname.startsWith("/persons") || personId) && groupId && (
                 <button

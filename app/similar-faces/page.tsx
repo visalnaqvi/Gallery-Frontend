@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-
+import { useSearchParams } from "next/navigation";
 interface SimFace {
   sim_person_id: string;
   thumb_img_byte: string; // base64 string
@@ -18,54 +18,54 @@ export default function SimilarFacesList() {
   const [persons, setPersons] = useState<PersonData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  const searchParams = useSearchParams();
+  const groupId = searchParams.get("groupId");
   const base64ToDataUrl = (base64str: string) =>
     base64str ? `data:image/jpeg;base64,${base64str}` : "";
-
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/similar_persons");
+      if (!res.ok) throw new Error("Failed to fetch data");
+      const json = await res.json();
+      setPersons(json.data || []);
+    } catch (err) {
+      console.error(err);
+      setError("Could not load similar faces");
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch("/api/similar_persons");
-        if (!res.ok) throw new Error("Failed to fetch data");
-        const json = await res.json();
-        setPersons(json.data || []);
-      } catch (err) {
-        console.error(err);
-        setError("Could not load similar faces");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
-const merge = async (p_id: string, m_id: string) => {
-  try {
-    const response = await fetch("/api/merge_persons", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        merge_person_id: p_id,
-        merge_into_person_id: m_id,
-      }),
-    });
+  const merge = async (p_id: string, m_id: string) => {
+    try {
+      const response = await fetch("/api/merge_persons", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          merge_person_id: p_id,
+          merge_into_person_id: m_id,
+        }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Merge failed: ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Merge failed: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log("Merge successful:", data);
+      await fetchData()
+      return data;
+    } catch (error) {
+      console.error("Error merging persons:", error);
+      throw error;
     }
-
-    const data = await response.json();
-    console.log("Merge successful:", data);
-    return data;
-  } catch (error) {
-    console.error("Error merging persons:", error);
-    throw error;
-  }
-};
+  };
   if (loading) return <p>Loading...</p>;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
@@ -93,7 +93,7 @@ const merge = async (p_id: string, m_id: string) => {
               )}
               <div>
                 <Link
-                  href={`/persons/${person.person_id}`}
+                  href={`/gallery-person?personId=${person.person_id}&groupId=${groupId}`}
                   className="hover:underline"
                 >
                   <h2 className="font-bold text-lg text-blue-600">
@@ -113,8 +113,8 @@ const merge = async (p_id: string, m_id: string) => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   {person.sim_faces.map((simFace) => (
                     <div key={simFace.sim_person_id}><Link
-                      href={`/persons/${simFace.sim_person_id}`}
-                      
+                      href={`/gallery-person?personId=${simFace.sim_person_id}&groupId=${groupId}`}
+
                       className="flex flex-col items-center text-sm hover:bg-gray-50 p-2 rounded-lg transition-colors"
                     >
                       {simFace.thumb_img_byte ? (
@@ -135,7 +135,7 @@ const merge = async (p_id: string, m_id: string) => {
                         }
                       </span>
                     </Link>
-                    <button onClick={()=>{merge(person.person_id , simFace.sim_person_id)}}>Merge</button>
+                      <button onClick={() => { merge(person.person_id, simFace.sim_person_id) }}>Merge</button>
                     </div>
                   ))}
                 </div>

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 interface Person {
   person_id: string;
+  name: string;
   face_thumb_bytes: string; // base64 string
 }
 
@@ -42,25 +43,25 @@ export default function PersonThumbnails() {
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>Persons in Group {groupId}</h2>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+    <div style={{ padding: "20px", margin: "auto" }}>
+      <h2 className="font-semibold text-[30px] mb-[20px]">{persons.length} Persons in Group {groupId}</h2>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", margin: "auto" }}>
         {persons.map((p) => (
           <Link
             key={p.person_id}
             href={`/gallery-person?groupId=${groupId}&personId=${p.person_id}`}
             style={{ textDecoration: "none", color: "inherit" }}
           >
-            <div style={{ textAlign: "center", cursor: "pointer" }}>
+            <div className="text-center bg-blue-100 p-3 h-[150px] rounded-md">
               {p.face_thumb_bytes ? (
                 <img
-                  src={`data:image/jpeg;base64,${p.face_thumb_bytes}`}
+                  src={p.face_thumb_bytes}
                   alt={`Person ${p.person_id}`}
                   style={{
                     width: "100px",
                     height: "100px",
                     objectFit: "cover",
-                    borderRadius: "8px",
+                    borderRadius: "100px",
                   }}
                 />
               ) : (
@@ -80,7 +81,7 @@ export default function PersonThumbnails() {
                   No Image
                 </div>
               )}
-              <p>{p.person_id}</p>
+              <p className="font-medium mt-2">{p.name}</p>
             </div>
           </Link>
         ))}

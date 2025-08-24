@@ -16,10 +16,12 @@ interface MergeDetails {
   merge_person_id: string;
   merge_into_person_id: string;
   faces_updated: number;
+  image_ids_merged: number;
   similar_faces_deleted_as_main: number;
   similar_faces_deleted_as_similar: number;
   duplicate_similar_faces_removed: number;
   self_references_removed: number;
+  person_deleted: boolean;
 }
 
 interface MergeResponse {
@@ -79,10 +81,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
       // Step 1: Check if both persons exist
       const personCheckQuery = `
         SELECT 
-          COUNT(CASE WHEN person_id = $1 THEN 1 END) as merge_person_count,
-          COUNT(CASE WHEN person_id = $2 THEN 1 END) as target_person_count
+          COUNT(CASE WHEN person_id = $1::uuid THEN 1 END) as merge_person_count,
+          COUNT(CASE WHEN person_id = $2::uuid THEN 1 END) as target_person_count
         FROM faces
-        WHERE person_id IN ($1, $2)
+        WHERE person_id IN ($1::uuid, $2::uuid)
       `;
       
       const personCheckResult = await client.query(personCheckQuery, [merge_person_id, merge_into_person_id]);
@@ -115,7 +117,41 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
       
       const updatedFacesCount: number = updateFacesResult.rowCount || 0;
 
-      // Step 3: Handle similar_faces table cleanup
+      // Step 3: Handle persons table - merge image_ids arrays
+      // First, get the image_ids from the person being merged
+      const getMergePersonImageIdsQuery = `
+        SELECT image_ids
+        FROM persons
+        WHERE id = $1::uuid
+      `;
+      
+      const mergePersonResult = await client.query(getMergePersonImageIdsQuery, [merge_person_id]);
+      const mergePersonImageIds = mergePersonResult.rows[0]?.image_ids || [];
+
+      let mergedImageIdsCount = 0;
+      
+      if (mergePersonImageIds.length > 0) {
+        // Update the target person's image_ids by appending the merge person's image_ids
+        const updateTargetPersonImageIdsQuery = `
+          UPDATE persons 
+          SET image_ids = COALESCE(image_ids, '{}') || $2::uuid[]
+          WHERE id = $1::uuid
+        `;
+        
+        await client.query(updateTargetPersonImageIdsQuery, [merge_into_person_id, mergePersonImageIds]);
+        mergedImageIdsCount = mergePersonImageIds.length;
+      }
+
+      // Delete the person being merged from persons table
+      const deleteFromPersonsQuery = `
+        DELETE FROM persons 
+        WHERE id = $1::uuid
+      `;
+      
+      const deleteFromPersonsResult = await client.query(deleteFromPersonsQuery, [merge_person_id]);
+      const personDeleted = (deleteFromPersonsResult.rowCount || 0) > 0;
+
+      // Step 4: Handle similar_faces table cleanup
       // Delete records where merge_person_id appears as main person
       const deleteSimilarAsMainQuery = `
         DELETE FROM similar_faces 
@@ -123,13 +159,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
       `;
       
       const deleteSimilarAsMainResult = await client.query(deleteSimilarAsMainQuery, [merge_person_id]);
-
-      const deleteFromPersons = `
-        DELETE FROM persons 
-        WHERE person_id = $1
-      `;
-      
-      const deleteFromPersonsResult = await client.query(deleteSimilarAsMainQuery, [merge_person_id]);
       const deletedAsMainCount: number = deleteSimilarAsMainResult.rowCount || 0;
 
       // Delete records where merge_person_id appears as similar person
@@ -141,7 +170,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
       const deleteSimilarAsSimilarResult = await client.query(deleteSimilarAsSimilarQuery, [merge_person_id]);
       const deletedAsSimilarCount: number = deleteSimilarAsSimilarResult.rowCount || 0;
 
-      // Step 4: Remove any potential duplicate similar_faces entries that might have been created
+      // Step 5: Remove any potential duplicate similar_faces entries that might have been created
       // (e.g., if there were entries like person_A -> person_B and person_A -> person_C, 
       // and now both person_B and person_C point to the same merged person)
       const deduplicateQuery = `
@@ -157,7 +186,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
       const deduplicateResult = await client.query(deduplicateQuery);
       const deduplicatedCount: number = deduplicateResult.rowCount || 0;
 
-      // Step 5: Remove self-references (person similar to themselves)
+      // Step 6: Remove self-references (person similar to themselves)
       const removeSelfRefQuery = `
         DELETE FROM similar_faces 
         WHERE person_id = similar_person_id
@@ -177,10 +206,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
           merge_person_id,
           merge_into_person_id,
           faces_updated: updatedFacesCount,
+          image_ids_merged: mergedImageIdsCount,
           similar_faces_deleted_as_main: deletedAsMainCount,
           similar_faces_deleted_as_similar: deletedAsSimilarCount,
           duplicate_similar_faces_removed: deduplicatedCount,
-          self_references_removed: removedSelfRefsCount
+          self_references_removed: removedSelfRefsCount,
+          person_deleted: personDeleted
         }
       });
 

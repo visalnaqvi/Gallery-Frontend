@@ -7,18 +7,26 @@ import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
 import { ImageItem } from "@/types/ImageItem";
-
+import { Pencil, Check, X } from "lucide-react"; ``
+interface Person {
+    person_id: string;
+    name: string;
+    totalImages: number;
+    face_thumb_bytes: string; // base64 string
+}
 export default function GroupGallery() {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
     const personId = searchParams.get("personId");
-
+    const [personDetails, setPersonDetails] = useState<Person>();
     const [isOpen, setIsOpen] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [images, setImages] = useState<ImageItem[]>([]);
     const [loading, setLoading] = useState(false);
-
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState("");
     const loadedImagesRef = useRef<Set<string>>(new Set());
+    const [sorting, setSorting] = useState<string>("date_taken")
 
     // ✅ Preload images
     const preloadImage = useCallback((src: string) => {
@@ -41,8 +49,15 @@ export default function GroupGallery() {
         setLoading(true);
 
         try {
+            const resP = await fetch(
+                `/api/persons/getPersonDetails?personId=${personId}`
+            );
+            const dataP: Person = await resP.json();
+
+            setPersonDetails(dataP);
+
             const res = await fetch(
-                `/api/persons/getPerson?groupId=${groupId}&personId=${personId}`
+                `/api/persons/getPersonImages?groupId=${groupId}&personId=${personId}&sorting=${sorting}`
             );
             const data: ImageItem[] = await res.json();
 
@@ -53,11 +68,11 @@ export default function GroupGallery() {
         } finally {
             setLoading(false);
         }
-    }, [groupId, personId, preloadImage]);
+    }, [groupId, personId, preloadImage, sorting]);
 
     useEffect(() => {
         fetchImages();
-    }, [fetchImages]);
+    }, [fetchImages, sorting]);
 
     // ✅ Close on Esc
     useEffect(() => {
@@ -152,12 +167,109 @@ export default function GroupGallery() {
             console.error('Download failed:', error);
         }
     }, [images, currentIndex]);
+
+    const handleSaveName = async () => {
+        if (!personId) return;
+        try {
+            const res = await fetch("/api/persons/updateName", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ personId, name: editName }),
+            });
+            if (!res.ok) throw new Error("Failed to update name");
+            setPersonDetails((prev) => prev ? { ...prev, name: editName } : prev);
+            setIsEditing(false);
+        } catch (err) {
+            console.error("Error updating name:", err);
+            alert("Failed to update name");
+        }
+    };
     if (!groupId) return <p>No groupId provided in URL</p>;
 
     return (
         <>
             {/* Grid */}
-            <GalleryGrid handleImageClick={handleImageClick} images={images} />
+            {personDetails && (
+                <div className={"bg-blue-100 m-[10px] rounded-md flex items-center"}>
+
+                    <div>
+                        {personDetails.face_thumb_bytes ? (
+                            <img
+                                src={personDetails.face_thumb_bytes}
+                                alt={`Person ${personDetails.person_id}`}
+                                style={{
+                                    width: "100px",
+                                    height: "100px",
+                                    objectFit: "cover",
+                                    borderRadius: "8px",
+                                }}
+                            />
+                        ) : (
+                            <div
+                                style={{
+                                    width: "100px",
+                                    height: "100px",
+                                    background: "#eee",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    borderRadius: "8px",
+                                    fontSize: "0.8rem",
+                                    color: "#666",
+                                }}
+                            >
+                                No Image
+                            </div>
+                        )}
+                    </div>
+                    {/* Editable Name */}
+                    <div className="ml-[20px]">
+                        <div className="flex items-center justify-start gap-2">
+                            {isEditing ? (
+                                <>
+                                    <input
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="px-2 py-1 border rounded"
+                                    />
+                                    <button
+                                        onClick={handleSaveName}
+                                        className="text-green-600 hover:text-green-800"
+                                    >
+                                        <Check size={20} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setEditName(personDetails.name);
+                                            setIsEditing(false);
+                                        }}
+                                        className="text-red-600 hover:text-red-800"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="font-semibold text-[30px]">{personDetails.name}</p>
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                    >
+                                        <Pencil size={18} />
+                                    </button>
+
+                                </>
+                            )}
+                        </div>
+                        <div>
+                            <p className="font-medium">Total Images: {personDetails.totalImages}</p>
+
+                        </div>
+                    </div>
+                </div>
+            )}
+            <GalleryGrid handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
 
             {loading && (
                 <div className="text-center py-8">
