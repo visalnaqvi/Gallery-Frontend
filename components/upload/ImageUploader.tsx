@@ -33,7 +33,7 @@ export default function ImageUploader() {
 
     // check groupId from URL first, fallback to context
     const groupId = searchParams.get("groupId") || groupIdFromContext;
-
+    console.log("group id", groupId)
     // keep active tasks so we can cancel them
     const activeTasks = useRef<UploadTask[]>([]);
 

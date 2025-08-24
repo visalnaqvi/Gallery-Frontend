@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -9,6 +8,7 @@ import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
 import { useUser } from '@/context/UserContext';
 import { GridLoader } from "react-spinners";
+
 type ApiResponse = {
     images: ImageItem[];
     hasMore: boolean;
@@ -26,10 +26,15 @@ export default function GroupGallery() {
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
     const LOAD_MORE_AHEAD = 10;
-    const [sorting, setSorting] = useState<string>("date_taken")
+    const [sorting, setSorting] = useState<string>("date_taken");
     const loaderRef = useRef<HTMLDivElement | null>(null);
-    const [hotImages, setHotImages] = useState(0)
-    const { setGroupId } = useUser()
+    const [hotImages, setHotImages] = useState(0);
+    const { setGroupId } = useUser();
+
+    // Add ref to track current groupId to prevent stale closures
+    const currentGroupIdRef = useRef<string | null>(null);
+    const currentSortingRef = useRef<string>("date_taken");
+
     // ✅ Use refs for cache + preloaded images (no re-render)
     const loadedImagesRef = useRef<Set<string>>(new Set());
     const cache = useRef<{
@@ -45,7 +50,6 @@ export default function GroupGallery() {
     // ✅ Preload image without re-render
     const preloadImage = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return Promise.resolve();
-
         return new Promise<void>((resolve, reject) => {
             const img = new window.Image();
             img.onload = () => {
@@ -57,22 +61,48 @@ export default function GroupGallery() {
         });
     }, []);
 
-    // ✅ Fetch images with caching
-    const fetchImages = useCallback(async () => {
-        if (!groupId || !hasMore || loading) return;
+    // ✅ Reset state function
+    const resetState = useCallback(() => {
+        setImages([]);
+        setPage(0);
+        setHasMore(true);
+        setLoading(false);
+        setHotImages(0);
+        loadedImagesRef.current.clear();
+        cache.current.pages.clear();
+        cache.current.allImages.clear();
+        cache.current.loadingStates.clear();
+    }, []);
 
-        const requestKey = `${groupId}-${page}`;
+    // ✅ Fetch images with better state management
+    const fetchImages = useCallback(async (currentPage?: number, resetImages?: boolean) => {
+        const actualGroupId = currentGroupIdRef.current;
+        const actualSorting = currentSortingRef.current;
+        const actualPage = currentPage !== undefined ? currentPage : page;
+
+        if (!actualGroupId || loading) return;
+
+        // Don't fetch if we don't have more pages (unless it's the first page)
+        if (!hasMore && actualPage > 0) return;
+
+        const requestKey = `${actualGroupId}-${actualPage}`;
 
         setLoading(true);
-
         try {
-            const res = await fetch(`/api/groups/images?groupId=${groupId}&page=${page}&sorting=${sorting}`);
+            const res = await fetch(`/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}`);
             const data: ApiResponse = await res.json();
 
-            setImages((prev) => [...prev, ...data.images]);
+            if (resetImages || actualPage === 0) {
+                setImages(data.images);
+            } else {
+                setImages((prev) => [...prev, ...data.images]);
+            }
+
             setHasMore(data.hasMore);
-            setPage((prev) => prev + 1);
-            setHotImages(data.hotImages)
+            setPage(actualPage + 1);
+            setHotImages(data.hotImages);
+
+            // Preload images
             data.images.forEach((image) => preloadImage(image.compressed_location));
         } catch (err) {
             console.error("Failed to fetch images", err);
@@ -80,10 +110,40 @@ export default function GroupGallery() {
             setLoading(false);
             cache.current.loadingStates.set(requestKey, false);
         }
-    }, [groupId, page, hasMore, loading, preloadImage, sorting]);
+    }, [page, hasMore, loading, preloadImage]);
+
+    // ✅ Effect to handle groupId changes
     useEffect(() => {
-        console.log("sorting changed to ", sorting)
-    })
+        if (!groupId) return;
+
+        // Only reset and fetch if groupId actually changed
+        if (currentGroupIdRef.current !== groupId) {
+            console.log("GroupId changed from", currentGroupIdRef.current, "to", groupId);
+            currentGroupIdRef.current = groupId;
+            resetState();
+            // Use setTimeout to ensure state is reset before fetching
+            setTimeout(() => {
+                fetchImages(0, true);
+            }, 0);
+        }
+    }, [groupId, resetState]);
+
+    // ✅ Effect to handle sorting changes
+    useEffect(() => {
+        if (!groupId) return;
+
+        // Only reset and fetch if sorting actually changed
+        if (currentSortingRef.current !== sorting) {
+            console.log("Sorting changed from", currentSortingRef.current, "to", sorting);
+            currentSortingRef.current = sorting;
+            resetState();
+            // Use setTimeout to ensure state is reset before fetching
+            setTimeout(() => {
+                fetchImages(0, true);
+            }, 0);
+        }
+    }, [sorting, groupId, resetState]);
+
     // Helper function to download from Firebase URL with CORS handling
     const downloadFromFirebaseUrl = useCallback(async (url: string, filename: string) => {
         try {
@@ -92,12 +152,10 @@ export default function GroupGallery() {
             link.href = url;
             link.download = filename;
             link.target = "_blank";
-
             // Add to DOM temporarily
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
         } catch (err) {
             console.error("Failed to download image:", err);
             alert("Failed to download image. The image will open in a new tab instead.");
@@ -112,7 +170,6 @@ export default function GroupGallery() {
             const fileResp = await fetch(images[currentIndex].compressed_location);
             const blob = await fileResp.blob();
             const url = window.URL.createObjectURL(blob);
-
             // Trigger download
             const link = document.createElement('a');
             link.href = url;
@@ -120,7 +177,6 @@ export default function GroupGallery() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Download failed:', error);
@@ -132,17 +188,17 @@ export default function GroupGallery() {
         try {
             const response = await fetch('/api/images/download', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
                     filename: images[currentIndex].id,
                 })
             });
-
             const { downloadUrl } = await response.json();
             const fileResp = await fetch(downloadUrl);
             const blob = await fileResp.blob();
             const url = window.URL.createObjectURL(blob);
-
             // Trigger download
             const link = document.createElement('a');
             link.href = url;
@@ -150,36 +206,18 @@ export default function GroupGallery() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Download failed:', error);
         }
     }, [images, currentIndex]);
-    useEffect(() => {
-        if (!groupId) return;
 
-        // Reset all state whenever user navigates to this group
-        setImages([]);
-        setPage(0);
-        setHasMore(true);
-        setLoading(false);
-
-        loadedImagesRef.current.clear();
-        cache.current.pages.clear();
-        cache.current.allImages.clear();
-        cache.current.loadingStates.clear();
-
-        fetchImages();
-    }, [groupId, sorting]);
-
-
-    // ✅ Infinite scroll observer
+    // ✅ Infinite scroll observer - separate from main fetch logic
     useEffect(() => {
         let timeoutId: NodeJS.Timeout;
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0].isIntersecting && !loading) {
+                if (entries[0].isIntersecting && !loading && hasMore && images.length > 0) {
                     clearTimeout(timeoutId);
                     timeoutId = setTimeout(() => fetchImages(), 100);
                 }
@@ -193,7 +231,7 @@ export default function GroupGallery() {
             if (loaderRef.current) observer.unobserve(loaderRef.current);
             observer.disconnect();
         };
-    }, [fetchImages, loading]);
+    }, [fetchImages, loading, hasMore, images.length]);
 
     // ✅ Close on Esc
     useEffect(() => {
@@ -215,10 +253,13 @@ export default function GroupGallery() {
         (idx: number) => {
             setCurrentIndex(idx);
             setIsOpen(true);
+            const indicesToPreload = [
+                idx - 10, idx - 9, idx - 8, idx - 7, idx - 6,
+                idx - 5, idx - 4, idx - 3, idx - 2, idx - 1,
+                idx, idx + 1, idx + 2, idx + 3, idx + 4,
+                idx + 5, idx + 6, idx + 7, idx + 8, idx + 9, idx + 10
+            ].filter((i) => i >= 0 && i < images.length);
 
-            const indicesToPreload = [idx - 10, idx - 9, idx - 8, idx - 7, idx - 6, idx - 5, idx - 4, idx - 3, idx - 2, idx - 1, idx, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5, idx + 6, idx + 7, idx + 8, idx + 9, idx + 10].filter(
-                (i) => i >= 0 && i < images.length
-            );
             indicesToPreload.forEach((i) => preloadImage(images[i].compressed_location));
 
             if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
@@ -229,7 +270,6 @@ export default function GroupGallery() {
     );
 
     if (!groupId) return <p>No groupId provided in URL</p>;
-
 
     // ✅ Stable gallery items
     const galleryItems: ReactImageGalleryItem[] = useMemo(
@@ -243,13 +283,24 @@ export default function GroupGallery() {
             })),
         [images]
     );
-    if (hotImages == 0 && images.length == 0) return <div className="p-4 m-4 bg-blue-100 ">
-        <p className="text-blue-800 font-semibold rounded-[10px]">No Images in this group</p>
-        <button onClick={() => {
-            setGroupId(parseInt(groupId))
-            router.push('/upload')
-        }} className="p-2 bg-blue-700 text-white rounded text-sm font-semibold mt-4">Upload Images</button>
-    </div>;
+
+    if (hotImages === 0 && images.length === 0 && !loading) {
+        return (
+            <div className="p-4 m-4 bg-blue-100">
+                <p className="text-blue-800 font-semibold rounded-[10px]">No Images in this group</p>
+                <button
+                    onClick={() => {
+                        setGroupId(parseInt(groupId));
+                        router.push('/upload');
+                    }}
+                    className="p-2 bg-blue-700 text-white rounded text-sm font-semibold mt-4"
+                >
+                    Upload Images
+                </button>
+            </div>
+        );
+    }
+
     return (
         <>
             {/* Grid */}
@@ -263,12 +314,19 @@ export default function GroupGallery() {
                             aria-label="Loading Spinner"
                             data-testid="loader"
                         />
-                        <p className="text-blue-600 font-semibold">Your recent uploaded {hotImages} images are being processed and will be available shortly...</p>
+                        <p className="text-blue-600 font-semibold">
+                            Your recent uploaded {hotImages} images are being processed and will be available shortly...
+                        </p>
                     </div>
                 </div>
             )}
 
-            <GalleryGrid handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
+            <GalleryGrid
+                handleImageClick={handleImageClick}
+                images={images}
+                sorting={sorting}
+                setSorting={setSorting}
+            />
 
             {loading && (
                 <div className="text-center py-8">
@@ -348,7 +406,7 @@ export default function GroupGallery() {
                                             fill
                                             className="object-contain"
                                             priority={false}
-                                            loading="eager"   // eagerly load visible image
+                                            loading="eager"
                                             unoptimized
                                         />
                                     </div>

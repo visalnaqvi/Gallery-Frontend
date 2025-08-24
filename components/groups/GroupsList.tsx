@@ -39,8 +39,8 @@ export default function GroupsList() {
     }
 
     useEffect(() => {
-        fetchGroups();
-    }, []);
+        if (session?.user?.id) { fetchGroups(); }
+    }, [session?.user?.id]);
 
     return (
         <div className={styles.mainWrapper}>
