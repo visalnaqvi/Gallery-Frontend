@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
 import { storage } from "@/lib/firebaseAdmin"; 
+import { getToken } from "next-auth/jwt";
 
 // setup postgres connection
 const pool = new Pool({
@@ -9,6 +10,7 @@ const pool = new Pool({
 
 // helper to refresh signed url
 async function refreshSignedUrl(imgId: string) {
+  
   try {
     const file = storage.bucket().file("compressed_" + imgId);
 
@@ -41,6 +43,10 @@ async function refreshSignedUrl(imgId: string) {
 }
 
 export async function GET(req: NextRequest) {
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");

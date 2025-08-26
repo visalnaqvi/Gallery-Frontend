@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
+import { getToken } from "next-auth/jwt";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
 
 export async function GET(req: NextRequest) {
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   try {
     const client = await pool.connect();
     const { searchParams } = new URL(req.url);

@@ -1,12 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextResponse , NextRequest } from "next/server";
 import { Pool } from "pg";
+import { getToken } from "next-auth/jwt";
 
 // Create a connection pool (singleton)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const { searchParams } = new URL(req.url);
     const imageId = searchParams.get("id");

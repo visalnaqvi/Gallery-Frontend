@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg"; // your db helper
+import { getToken } from "next-auth/jwt";
+
 export async function GET(req: NextRequest , context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-
+    const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const conn = new Pool({
       connectionString: process.env.DATABASE

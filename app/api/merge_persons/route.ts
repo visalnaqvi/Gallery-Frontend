@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool, PoolClient } from "pg";
+import { getToken } from "next-auth/jwt";
 
 // Type definitions
 interface MergeRequest {
@@ -51,9 +52,13 @@ const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
 
-export async function POST(request: NextRequest): Promise<NextResponse<MergeResponse | ErrorResponse>> {
+export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse | ErrorResponse>> {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
-    const body: MergeRequest = await request.json();
+    const body: MergeRequest = await req.json();
     const { merge_person_id, merge_into_person_id } = body;
 
     // Validate required fields
@@ -252,9 +257,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<MergeResp
 }
 
 // Optional: Add GET method to check merge feasibility
-export async function GET(request: NextRequest): Promise<NextResponse<PreviewResponse | ErrorResponse>> {
+export async function GET(req: NextRequest): Promise<NextResponse<PreviewResponse | ErrorResponse>> {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
-    const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(req.url);
     const merge_person_id: string | null = searchParams.get('merge_person_id');
     const merge_into_person_id: string | null = searchParams.get('merge_into_person_id');
 

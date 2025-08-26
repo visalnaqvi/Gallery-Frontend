@@ -2,12 +2,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import { getToken } from "next-auth/jwt";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
 
 export async function GET(req: NextRequest) {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
 
@@ -35,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     const groupQuery = await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status
+      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access
        FROM groups
        WHERE id = ANY($1)`,
       [groupIds]
@@ -53,8 +58,8 @@ export async function GET(req: NextRequest) {
         total_size:row.total_size,
         admin_user:row.admin_user,
         last_image_uploaded_at:row.last_image_uploaded_at,
-        status:row.status
-
+        status:row.status,
+      access:row.access
     }));
 
     return NextResponse.json({ groups: formattedRows }, { status: 200 });
@@ -68,6 +73,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name, userId , profile_pic_bytes , access , planType } = body;
   let profilePicBuffer = null;
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 if (profile_pic_bytes) {
   // If it's an array of numbers (e.g. [255, 216, 255, ...])
   if (Array.isArray(profile_pic_bytes)) {
@@ -107,6 +116,10 @@ if (profile_pic_bytes) {
 
 // NEW METHOD: Update group status to "heating"
 export async function PATCH(req: NextRequest) {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const body = await req.json();
   const { groupId } = body;
 

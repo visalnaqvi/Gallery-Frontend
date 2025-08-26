@@ -64,10 +64,10 @@ export default function GroupsList() {
                         <li key={group.id} className={styles.groupCard}>
                             {
                                 group.profile_pic_bytes == undefined || group.profile_pic_bytes == null || group.profile_pic_bytes == "" ?
-                                    <div className={styles.groupImage}>
-                                        <div className={styles.innerWordWrapper} onClick={() => {
-                                            router.push("/gallery-groups?groupId=" + group.id)
-                                        }}>{group.name.charAt(0)}</div>
+                                    <div className={styles.groupImage} onClick={() => {
+                                        router.push("/gallery-groups?groupId=" + group.id)
+                                    }}>
+                                        <div className={styles.innerWordWrapper}>{group.name.charAt(0)}</div>
                                     </div> : <div className={styles.cardThumWrapper} onClick={() => {
                                         router.push("/gallery-groups?groupId=" + group.id)
                                     }}><img className={styles.img} src={group.profile_pic_bytes} alt="group image"></img></div>
@@ -75,13 +75,17 @@ export default function GroupsList() {
                             <div className={styles.groupDetails}>
                                 <p className={styles.groupName}>{group.name}</p>
                                 <p className={styles.groupData}>Images: {group.total_images}</p>
-                                {group.admin_user == session?.user?.id && <div className={styles.adminPanel}>
-                                    <button className={styles.uploadBtn} onClick={() => {
-                                        setGroupId(group.id)
-                                        router.push("/upload")
-                                    }}>Upload Images</button>
+                                <div className='flex mt-2'><button className="cursor-pointer bg-blue-500 mr-2 text-white px-2 py-1 rounded" onClick={() => {
+                                    router.push("/gallery-groups?groupId=" + group.id)
+                                }}>View Images</button>
+                                    {group.admin_user == session?.user?.id &&
+                                        <div className={styles.adminPanel}>
+                                            <button className="bg-blue-400 text-white px-2 py-1 rounded cursor-pointer" onClick={() => {
+                                                setGroupId(group.id)
+                                                router.push("/upload")
+                                            }}>Upload Images</button>
 
-                                </div>}
+                                        </div>}</div>
                             </div>
 
                         </li>

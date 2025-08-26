@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload } from "lucide-react";
+import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload, Eye, Lock } from "lucide-react";
 import logo from "../public/logo-white.png";
 
 interface Group {
@@ -13,6 +13,7 @@ interface Group {
     total_size: string;
     admin_user: number;
     last_image_uploaded_at: string;
+    access: string;
     status: string;
 }
 
@@ -156,7 +157,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                         <h2 className="font-semibold text-lg">All Groups</h2>
                         <br />
                         <button
-                            className="bg-white text-blue-500 p-2 rounded text-sm"
+                            className="bg-white text-blue-500 p-2 rounded text-sm cursor-pointer"
                             onClick={() => handleNavigate('/')}
                         >
                             View All
@@ -194,6 +195,12 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                                 <ChevronRight size={16} />
                                             )}
                                         </button>
+                                        <span className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
+                                            }`}>
+                                            {
+                                                group.access?.toLowerCase() == 'public' ? <Eye size={16} /> : <Lock size={16} />
+                                            }
+                                        </span>
                                         <button
                                             onClick={() => handleGroupNavigation(group.id)}
                                             className={`font-medium truncate text-left flex-1 hover:text-blue-200 ${isActiveGroup(group.id) ? 'text-white font-semibold' : ''
@@ -209,6 +216,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                     >
                                         {group.total_images} imgs
                                     </span>
+
                                 </div>
 
                                 {/* Group Tabs */}

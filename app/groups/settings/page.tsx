@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import InfoToast from "@/components/infoToast";
 
 type GroupDetails = {
     name: string;
@@ -149,142 +150,146 @@ export default function GroupSettingsPage() {
         }
     };
 
-    if (loading) return <div className="p-6">Loading...</div>;
-    if (!group) return <div className="p-6">Group not found</div>;
+    if (loading) return <div className="p-6"><InfoToast loading={true} message="Loading..." /></div>;
+    if (!group) return <div className="p-6"><InfoToast loading={false} message="Group Not Found..." /></div>;
 
     return (
-        <div className="max-w-2xl mx-auto p-6 bg-white shadow rounded-xl">
-            <h1 className="text-2xl font-bold mb-4">Group Settings</h1>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Group Name */}
-                <div>
-                    <label className="block text-sm font-medium">Group Name</label>
-                    <input
-                        type="text"
-                        name="name"
-                        value={form.name || ""}
-                        onChange={handleChange}
-                        className="mt-1 w-full p-2 border rounded-lg"
-                    />
-                </div>
-
-                {/* Profile Picture */}
-                <div>
-                    <label className="block text-sm font-medium">Profile Picture</label>
-                    <div className="flex items-center gap-4 mt-2">
-                        {(preview || group.profile_pic_bytes) && (
-                            <img
-                                src={preview || group.profile_pic_bytes}
-                                alt="Group Profile"
-                                className="w-20 h-20 rounded-full object-cover"
-                            />
-                        )}
+        <div>
+            <br></br>
+            <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-xl mt-2">
+                <h1 className="text-2xl font-bold mb-4">Group Settings</h1>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Group Name */}
+                    <div>
+                        <label className="block text-sm font-medium">Group Name</label>
                         <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileChange}
-                            className="border p-2 rounded"
+                            type="text"
+                            name="name"
+                            value={form.name || ""}
+                            onChange={handleChange}
+                            className="mt-1 w-full p-2 border rounded-lg border-[#dbdbdb] shadow-sm"
                         />
                     </div>
-                </div>
 
-                {/* Plan Type */}
-                <div>
+                    {/* Profile Picture */}
+                    <div>
+                        <label className="block text-sm font-medium">Profile Picture</label>
+                        <div className="flex items-center gap-4 mt-2">
+                            {(preview || group.profile_pic_bytes) && (
+                                <img
+                                    src={preview || group.profile_pic_bytes}
+                                    alt="Group Profile"
+                                    className="w-20 h-20 rounded-full object-cover"
+                                />
+                            )}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileChange}
+                                className="border p-2 rounded border-[#dbdbdb] shadow-sm"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Plan Type */}
+                    {/* <div>
                     <label className="block text-sm font-medium">Plan Type</label>
                     <select
                         name="plan_type"
                         value={form.plan_type || ""}
                         onChange={handleChange}
-                        className="mt-1 w-full p-2 border rounded-lg"
+                        disabled
+                        className="mt-1 w-full p-2 border rounded-lg bg-gray-100"
                     >
                         <option value="Lite">Lite</option>
                         <option value="Pro">Pro</option>
                         <option value="Elite">Elite</option>
                     </select>
-                </div>
+                </div> */}
 
-                {/* Access */}
-                <div>
-                    <label className="block text-sm font-medium">Access</label>
-                    <select
-                        name="access"
-                        value={form.access || ""}
-                        onChange={handleChange}
-                        className="mt-1 w-full p-2 border rounded-lg"
+                    {/* Access */}
+                    <div>
+                        <label className="block text-sm font-medium">Access</label>
+                        <select
+                            name="access"
+                            value={form.access || ""}
+                            onChange={handleChange}
+                            className="mt-1 w-full p-2 border rounded-lg border-[#dbdbdb] shadow-sm"
+                        >
+                            <option value="Private">Private</option>
+                            <option value="Public">Public</option>
+                        </select>
+                    </div>
+
+                    {/* Admin User */}
+                    <div>
+                        <label className="block text-sm font-medium">Admin User</label>
+                        <select
+                            name="admin_user"
+                            value={form.admin_user || ""}
+                            onChange={handleChange}
+                            className="mt-1 w-full p-2 border rounded-lg border-[#dbdbdb] shadow-sm"
+                        >
+                            {users.map((user, idx) => (
+                                <option key={idx} value={user.email}>
+                                    {user.name} ({user.email})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Read-only fields */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium">Total Images</label>
+                            <input
+                                type="text"
+                                value={group.total_images}
+                                disabled
+                                className="mt-1 w-full p-2 border rounded-lg bg-gray-100 border-[#dbdbdb] shadow-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium">Total Size</label>
+                            <input
+                                type="text"
+                                value={group.total_size}
+                                disabled
+                                className="mt-1 w-full p-2 border rounded-lg bg-gray-100 border-[#dbdbdb] shadow-sm"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Read-only fields */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium">Last Image Uploaded At</label>
+                            <input
+                                type="text"
+                                value={group.last_image_uploaded_at ? group.last_image_uploaded_at : ""}
+                                disabled
+                                className="mt-1 w-full p-2 border rounded-lg bg-gray-100 border-[#dbdbdb] shadow-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium">Create On</label>
+                            <input
+                                type="text"
+                                value={group.created_at ? group.created_at : ""}
+                                disabled
+                                className="mt-1 w-full p-2 border rounded-lg bg-gray-100 border-[#dbdbdb] shadow-sm"
+                            />
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 cursor-pointer"
                     >
-                        <option value="Private">Private</option>
-                        <option value="Public">Public</option>
-                    </select>
-                </div>
-
-                {/* Admin User */}
-                <div>
-                    <label className="block text-sm font-medium">Admin User</label>
-                    <select
-                        name="admin_user"
-                        value={form.admin_user || ""}
-                        onChange={handleChange}
-                        className="mt-1 w-full p-2 border rounded-lg"
-                    >
-                        {users.map((user, idx) => (
-                            <option key={idx} value={user.email}>
-                                {user.name} ({user.email})
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Read-only fields */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium">Total Images</label>
-                        <input
-                            type="text"
-                            value={group.total_images}
-                            disabled
-                            className="mt-1 w-full p-2 border rounded-lg bg-gray-100"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">Total Size</label>
-                        <input
-                            type="text"
-                            value={group.total_size}
-                            disabled
-                            className="mt-1 w-full p-2 border rounded-lg bg-gray-100"
-                        />
-                    </div>
-                </div>
-
-                {/* Read-only fields */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium">Last Image Uploaded At</label>
-                        <input
-                            type="text"
-                            value={group.last_image_uploaded_at ? group.last_image_uploaded_at : ""}
-                            disabled
-                            className="mt-1 w-full p-2 border rounded-lg bg-gray-100"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">Create On</label>
-                        <input
-                            type="text"
-                            value={group.created_at ? group.created_at : ""}
-                            disabled
-                            className="mt-1 w-full p-2 border rounded-lg bg-gray-100"
-                        />
-                    </div>
-                </div>
-
-                <button
-                    type="submit"
-                    className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
-                >
-                    Save Changes
-                </button>
-            </form>
+                        Save Changes
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }

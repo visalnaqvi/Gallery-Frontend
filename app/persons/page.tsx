@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import InfoToast from "@/components/infoToast";
 
 interface Person {
   person_id: string;
@@ -39,7 +40,7 @@ export default function PersonThumbnails() {
   }, [groupId]); // 👈 re-run when groupId changes
 
   if (!groupId) return <p style={{ color: "red" }}>Missing groupId</p>;
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <InfoToast loading={true} message="Loading..." />;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (

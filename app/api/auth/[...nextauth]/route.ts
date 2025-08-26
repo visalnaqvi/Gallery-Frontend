@@ -34,18 +34,22 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password required');
-        }
+  if (!credentials?.email || !credentials?.password) {
+    return null;
+  }
 
-        const user = await getUserByEmail(credentials.email);
-        console.log("got result"  , user)
-        if (!user || !(await bcrypt.compare(credentials.password, user.password_hash))) {
-          throw new Error('Invalid credentials');
-        }
+  const user = await getUserByEmail(credentials.email);
+  if (!user) {
+    return null; // user not found
+  }
 
-        return { id: user.id, email: user.email };
-      },
+  const isPasswordValid = await bcrypt.compare(credentials.password, user.password_hash);
+  if (!isPasswordValid) {
+    return null; // password mismatch
+  }
+
+  return { id: user.id, email: user.email };
+},
     }),
   ],
   session: {

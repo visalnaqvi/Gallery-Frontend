@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
+import { getToken } from "next-auth/jwt";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE,
@@ -9,7 +10,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { personId, name } = body;
-
+    const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     if (!personId || !name) {
       return NextResponse.json({ error: "Missing personId or name" }, { status: 400 });
     }

@@ -25,6 +25,7 @@ export default function RootLayout({
   const [drawerOpen, setDrawerOpen] = useState(true);
 
   const hideHeader = pathname.startsWith('/auth');
+  const isPublic = pathname.startsWith('/public')
   const isHomePage = pathname === '/';
 
   const handleNavigate = (target: string) => {
@@ -53,16 +54,16 @@ export default function RootLayout({
                 </div>
 
                 {/* Right: user icon */}
-                <button
-                  onClick={() => handleNavigate("/user-profile")}
+                {!isPublic && <button
+                  onClick={() => handleNavigate("/profile")}
                   className="text-white hover:text-gray-200 hover:bg-blue-600 p-2 rounded-full transition-colors"
                 >
                   <User size={24} />
-                </button>
+                </button>}
               </header>
 
               {/* Sidebar Drawer - only show when not on home page */}
-              {!isHomePage && (
+              {!isHomePage && !isPublic && (
                 <SideDrawer
                   isOpen={drawerOpen}
                   onClose={() => setDrawerOpen(false)}
@@ -71,7 +72,7 @@ export default function RootLayout({
 
               {/* Main Content Area */}
               <main
-                className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && drawerOpen ? "ml-72" : "ml-0"
+                className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && !isPublic && drawerOpen ? "ml-72" : "ml-0"
                   }`}
               >
                 {children}

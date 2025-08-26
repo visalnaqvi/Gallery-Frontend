@@ -2,34 +2,55 @@
 
 import Image from "next/image";
 import { ImageItem } from "@/types/ImageItem";
+import { Clipboard, ClipboardCopy } from "lucide-react";
 
 type GalleryGridProps = {
     handleImageClick: (index: number) => void;
     images: ImageItem[];
     sorting: string;
     setSorting: (value: string) => void;
+    groupId: string | null;
+    personId: string | null;
+    isPerson: boolean;
 };
 
-export default function GalleryGrid({ handleImageClick, images, sorting, setSorting }: GalleryGridProps) {
+export default function GalleryGrid({ handleImageClick, images, sorting, setSorting, groupId, personId, isPerson }: GalleryGridProps) {
     return (
         <>
             {/* Sorting Dropdown */}
             <div className="flex justify-end items-center p-4">
-                <label htmlFor="sort" className="mr-2 text-sm font-medium text-gray-700">
-                    Sort by:
-                </label>
-                <select
-                    id="sort"
-                    value={sorting}
-                    onChange={(e) => setSorting(e.target.value)}
-                    className="border rounded-lg px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="date_taken">Date Taken</option>
-                    <option value="filename">Name</option>
-                    <option value="uploaded_at">Upload Date</option>
-                </select>
-            </div>
+                <div className="flex justify-end items-center mr-2">
+                    <label htmlFor="sort" className="mr-2 text-sm font-medium text-gray-700">
+                        Sort by:
+                    </label>
+                    <select
+                        id="sort"
+                        value={sorting}
+                        onChange={(e) => setSorting(e.target.value)}
+                        className="border rounded-lg px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="date_taken">Date Taken</option>
+                        <option value="filename">Name</option>
+                        <option value="uploaded_at">Upload Date</option>
+                    </select>
+                </div>
 
+                {groupId && <div className="flex justify-end items-center">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const domain = window.location.origin; // current domain
+                            const link = isPerson ? `${domain}/public/gallery-person?groupId=${groupId}&personId=${personId}` : `${domain}/public/gallery-groups?groupId=${groupId}`;
+                            navigator.clipboard.writeText(link);
+                            alert("Sharable link copied!");
+                        }}
+                        className="flex justify-center items-center bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 transition"
+                    >
+                        <ClipboardCopy size={16} className="mr-2 mb-1" />
+                        Copy Sharable Link
+                    </button>
+                </div>}
+            </div>
             {/* Image Grid */}
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                 {images.map((image, idx) => (

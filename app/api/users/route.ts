@@ -2,12 +2,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import { getToken } from "next-auth/jwt";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
 
 export async function GET(req: NextRequest) {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get('groupId');
 

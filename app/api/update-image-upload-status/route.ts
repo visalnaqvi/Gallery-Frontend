@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { getToken } from "next-auth/jwt";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE!, // Railway DB connection
 });
 
 export async function POST(req: NextRequest) {
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   try {
     const { userId, groupId, images } = await req.json();
     const client = await pool.connect();

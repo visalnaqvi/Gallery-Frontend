@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import InfoToast from "@/components/infoToast";
 interface SimFace {
   sim_person_id: string;
   thumb_img_byte: string; // base64 string
@@ -66,7 +67,7 @@ export default function SimilarFacesList() {
       throw error;
     }
   };
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <InfoToast loading={true} message="Loading..." />;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (
