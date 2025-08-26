@@ -48,6 +48,6 @@ export const config = {
      * - static files
      * - well-known files
      */
-    "/((?!_next/|_next|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js)$|\\.well-known/).+)",
+    "/((?!_next/|_next|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js)$|\\.well-known/).*)",
   ],
 };

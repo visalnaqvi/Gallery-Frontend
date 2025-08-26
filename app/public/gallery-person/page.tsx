@@ -1,5 +1,7 @@
+'use client'
 import Gallery from "@/components/gallery/persons"
+import { Suspense } from "react"
 
 export default function PersonsGallery() {
-    return <Gallery />
+    return <Suspense fallback={<div>Loading...</div>}><Gallery /></Suspense>
 }

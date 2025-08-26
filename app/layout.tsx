@@ -4,8 +4,8 @@ import './globals.css';
 import { Providers } from './providers'
 import { Montserrat } from 'next/font/google';
 import logo from "../public/logo-white.png"
-import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
 import { Menu, User } from "lucide-react";
 import { SideDrawer } from '@/components/SideDrawer';
 
@@ -36,51 +36,53 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${montserrat.className} flex h-screen`}>
         <Providers>
-          {!hideHeader && (
-            <>
-              {/* Header always on top */}
-              <header className="bg-blue-500 flex items-center justify-between p-4 fixed w-full z-20">
-                {/* Left: ham menu + logo */}
-                <div className="flex items-center gap-4">
-                  {!isHomePage && (
-                    <button
-                      onClick={() => setDrawerOpen(!drawerOpen)}
-                      className="text-white hover:bg-blue-600 p-1 rounded"
-                    >
-                      <Menu />
-                    </button>
-                  )}
-                  <Image src={logo} alt="logo" width={120} height={40} />
-                </div>
+          <Suspense fallback={<div>Loading</div>}>
+            {!hideHeader && (
+              <>
+                {/* Header always on top */}
+                <header className="bg-blue-500 flex items-center justify-between p-4 fixed w-full z-20">
+                  {/* Left: ham menu + logo */}
+                  <div className="flex items-center gap-4">
+                    {!isHomePage && (
+                      <button
+                        onClick={() => setDrawerOpen(!drawerOpen)}
+                        className="text-white hover:bg-blue-600 p-1 rounded"
+                      >
+                        <Menu />
+                      </button>
+                    )}
+                    <Image src={logo} alt="logo" width={120} height={40} />
+                  </div>
 
-                {/* Right: user icon */}
-                {!isPublic && <button
-                  onClick={() => handleNavigate("/profile")}
-                  className="text-white hover:text-gray-200 hover:bg-blue-600 p-2 rounded-full transition-colors"
+                  {/* Right: user icon */}
+                  {!isPublic && <button
+                    onClick={() => handleNavigate("/profile")}
+                    className="text-white hover:text-gray-200 hover:bg-blue-600 p-2 rounded-full transition-colors"
+                  >
+                    <User size={24} />
+                  </button>}
+                </header>
+
+                {/* Sidebar Drawer - only show when not on home page */}
+                {!isHomePage && !isPublic && (
+                  <SideDrawer
+                    isOpen={drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                  />
+                )}
+
+                {/* Main Content Area */}
+                <main
+                  className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && !isPublic && drawerOpen ? "ml-72" : "ml-0"
+                    }`}
                 >
-                  <User size={24} />
-                </button>}
-              </header>
+                  {children}
+                </main>
+              </>
+            )}
 
-              {/* Sidebar Drawer - only show when not on home page */}
-              {!isHomePage && !isPublic && (
-                <SideDrawer
-                  isOpen={drawerOpen}
-                  onClose={() => setDrawerOpen(false)}
-                />
-              )}
-
-              {/* Main Content Area */}
-              <main
-                className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && !isPublic && drawerOpen ? "ml-72" : "ml-0"
-                  }`}
-              >
-                {children}
-              </main>
-            </>
-          )}
-
-          {hideHeader && children}
+            {hideHeader && children}
+          </Suspense>
         </Providers>
       </body>
     </html>

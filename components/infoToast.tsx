@@ -1,3 +1,4 @@
+'use client'
 import { GridLoader } from "react-spinners";
 
 type props = {
