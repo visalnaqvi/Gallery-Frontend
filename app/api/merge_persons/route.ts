@@ -53,10 +53,10 @@ const pool = new Pool({
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse | ErrorResponse>> {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   try {
     const body: MergeRequest = await req.json();
     const { merge_person_id, merge_into_person_id } = body;
@@ -258,10 +258,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
 
 // Optional: Add GET method to check merge feasibility
 export async function GET(req: NextRequest): Promise<NextResponse<PreviewResponse | ErrorResponse>> {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   try {
     const { searchParams } = new URL(req.url);
     const merge_person_id: string | null = searchParams.get('merge_person_id');

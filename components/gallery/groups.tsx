@@ -31,7 +31,7 @@ export default function Gallery() {
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
     const { setGroupId } = useUser();
-
+    const [isForbidden, setIsForbidden] = useState<boolean>(false)
     // Add ref to track current groupId to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
@@ -92,7 +92,15 @@ export default function Gallery() {
         try {
             const res = await fetch(`/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}`);
             const data: ApiResponse = await res.json();
+            if (res.status === 403) {
+                setIsForbidden(true)
+                return
+            }
 
+            if (res.status != 200) {
+
+                return
+            }
             if (resetImages || actualPage === 0) {
                 setImages(data.images);
             } else {
@@ -284,6 +292,10 @@ export default function Gallery() {
             })),
         [images]
     );
+
+    if (isForbidden) {
+        return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
+    }
 
     if (hotImages === 0 && images.length === 0 && !loading) {
         return (

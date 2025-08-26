@@ -138,9 +138,9 @@ export default function CreateGroupModal({
                         onChange={e => setPlanType(e.target.value)}
                         className="w-full border p-2 rounded"
                     >
-                        <option value="Lite">Lite</option>
-                        <option value="Pro">Pro</option>
-                        <option value="Elite">Elite</option>
+                        <option value="lite">Lite</option>
+                        <option value="pro">Pro</option>
+                        <option value="elite">Elite</option>
                     </select>
                 </div>
 

@@ -28,7 +28,7 @@ export default function Gallery() {
     const [editName, setEditName] = useState("");
     const loadedImagesRef = useRef<Set<string>>(new Set());
     const [sorting, setSorting] = useState<string>("date_taken")
-
+    const [isForbidden, setIsForbidden] = useState<boolean>(false)
     // ✅ Preload images
     const preloadImage = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return Promise.resolve();
@@ -60,6 +60,13 @@ export default function Gallery() {
             const res = await fetch(
                 `/api/persons/getPersonImages?groupId=${groupId}&personId=${personId}&sorting=${sorting}`
             );
+            if (res.status === 403) {
+                setIsForbidden(true)
+                return
+            }
+            if (res.status != 200) {
+                return
+            }
             const data: ImageItem[] = await res.json();
 
             setImages(data);
@@ -185,6 +192,9 @@ export default function Gallery() {
             alert("Failed to update name");
         }
     };
+    if (isForbidden) {
+        return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
+    }
     if (!groupId) return <p>No groupId provided in URL</p>;
 
     return (

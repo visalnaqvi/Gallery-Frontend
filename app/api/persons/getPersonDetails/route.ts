@@ -7,10 +7,7 @@ const pool = new Pool({
 });
 
 export async function GET(req: NextRequest) {
-    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
+
   try {
     const client = await pool.connect();
     const { searchParams } = new URL(req.url);

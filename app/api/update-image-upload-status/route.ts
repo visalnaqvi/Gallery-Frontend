@@ -7,10 +7,10 @@ const pool = new Pool({
 });
 
 export async function POST(req: NextRequest) {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   try {
     const { userId, groupId, images } = await req.json();
     const client = await pool.connect();

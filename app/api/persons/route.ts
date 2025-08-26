@@ -7,14 +7,23 @@ const pool = new Pool({
 });
 
 export async function GET(req: NextRequest) {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+
   try {
     const client = await pool.connect();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
+    const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    if (!token) {
+          const res = await client.query(`
+            select access from groups where id = $1
+            ` , [groupId])
+
+            if(res.rows[0].access.toLowerCase() != 'public'){
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+
+          
+        }
     // Query: get distinct person_id with any one thumb_byte
     const query = `
 SELECT 

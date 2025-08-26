@@ -5,10 +5,7 @@ import { getToken } from "next-auth/jwt";
 
 export async function POST(req: NextRequest) {
   const { filename } = await req.json();
-    // const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
+
   try {
     const file = storage.bucket().file(filename);
 

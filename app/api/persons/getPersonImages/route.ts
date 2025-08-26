@@ -62,6 +62,19 @@ export async function GET(req: NextRequest) {
     const client = await pool.connect();
     
     try {
+                const token = await getToken({ req, secret: process.env.JWT_SECRET });
+
+      if (!token) {
+          const res = await client.query(`
+            select access from groups where id = $1
+            ` , [groupId])
+
+            if(res.rows[0].access.toLowerCase() != 'public'){
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+
+          
+        }
       console.log("person id" , personId)
      
         console.log("ftching using personid")

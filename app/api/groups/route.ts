@@ -9,10 +9,10 @@ const pool = new Pool({
 });
 
 export async function GET(req: NextRequest) {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
 
@@ -73,10 +73,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name, userId , profile_pic_bytes , access , planType } = body;
   let profilePicBuffer = null;
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
 if (profile_pic_bytes) {
   // If it's an array of numbers (e.g. [255, 216, 255, ...])
   if (Array.isArray(profile_pic_bytes)) {
@@ -116,10 +116,10 @@ if (profile_pic_bytes) {
 
 // NEW METHOD: Update group status to "heating"
 export async function PATCH(req: NextRequest) {
-      const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
   const body = await req.json();
   const { groupId } = body;
 

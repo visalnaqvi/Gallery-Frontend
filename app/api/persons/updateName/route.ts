@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { personId, name } = body;
-    const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    // if (!token) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
     if (!personId || !name) {
       return NextResponse.json({ error: "Missing personId or name" }, { status: 400 });
     }
