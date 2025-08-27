@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import CreateGroupModal from './CreateGroupModal';
-import { useUser } from '@/context/UserContext';
 import { useRouter } from 'next/navigation';
 import styles from "./styles.module.css"
 import { useSession } from "next-auth/react";
@@ -22,7 +21,6 @@ export default function GroupsList() {
     const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const { setGroupId } = useUser()
     const router = useRouter()
     const { data: session } = useSession();
     async function fetchGroups() {
@@ -81,8 +79,7 @@ export default function GroupsList() {
                                     {group.admin_user == session?.user?.id &&
                                         <div className={styles.adminPanel}>
                                             <button className="bg-blue-400 text-white px-2 py-1 rounded cursor-pointer" onClick={() => {
-                                                setGroupId(group.id)
-                                                router.push("/upload")
+                                                router.push(`/upload?groupId=${group.id}`)
                                             }}>Upload Images</button>
 
                                         </div>}</div>

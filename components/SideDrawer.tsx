@@ -4,7 +4,7 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload, Eye, Lock } from "lucide-react";
 import logo from "../public/logo-white.png";
-
+import { useSession } from 'next-auth/react';
 interface Group {
     id: number;
     name: string;
@@ -22,11 +22,13 @@ interface SideDrawerProps {
     onClose: () => void;
 }
 
+
+
 export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
-
+    const { data: session } = useSession()
     const [groups, setGroups] = useState<Group[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
     const [loading, setLoading] = useState(false);
@@ -39,7 +41,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
         if (isOpen && !isHomePage && groups.length === 0) {
             fetchGroups();
         }
-    }, [isOpen, isHomePage]);
+    }, [isOpen, isHomePage, session?.user.id]);
 
     // Auto-expand only current group and collapse others
     useEffect(() => {
@@ -60,7 +62,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     const fetchGroups = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:3000/api/groups?userId=1');
+            const response = await fetch('/api/groups?userId=' + session?.user?.id);
             const data = await response.json();
             setGroups(data.groups || []);
         } catch (error) {

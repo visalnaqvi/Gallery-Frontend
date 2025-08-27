@@ -6,8 +6,6 @@ import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css";
 import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
-import { useUser } from '@/context/UserContext';
-import { GridLoader } from "react-spinners";
 import InfoToast from "@/components/infoToast";
 
 type ApiResponse = {
@@ -30,7 +28,6 @@ export default function Gallery() {
     const [sorting, setSorting] = useState<string>("date_taken");
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
-    const { setGroupId } = useUser();
     const [isForbidden, setIsForbidden] = useState<boolean>(false)
     // Add ref to track current groupId to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
@@ -308,7 +305,7 @@ export default function Gallery() {
             {/* Grid */}
             {hotImages > 0 &&
                 <InfoToast loading={true} message={
-                    "Your recent uploaded {hotImages} images are being processed and will be available shortly..."
+                    `Your recent uploaded ${hotImages} images are being processed and will be available shortly...`
                 } />
             }
 

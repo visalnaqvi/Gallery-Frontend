@@ -9,7 +9,6 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useState, useRef } from 'react';
 import pLimit from 'p-limit';
-import { useUser } from '@/context/UserContext';
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
@@ -27,12 +26,11 @@ export default function ImageUploader() {
     const [uploading, setUploading] = useState(false);
     const [uploadedCount, setUploadedCount] = useState(0);
     const uploadCounter = useRef(0);
-    const { groupId: groupIdFromContext } = useUser();
     const { data: session } = useSession();
     const searchParams = useSearchParams();
 
     // check groupId from URL first, fallback to context
-    const groupId = searchParams.get("groupId") || groupIdFromContext;
+    const groupId = searchParams.get("groupId");
     console.log("group id", groupId)
     // keep active tasks so we can cancel them
     const activeTasks = useRef<UploadTask[]>([]);

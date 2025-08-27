@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ImageItem } from "@/types/ImageItem";
-import { Clipboard, ClipboardCopy } from "lucide-react";
+import { ClipboardCopy } from "lucide-react";
 
 type GalleryGridProps = {
     handleImageClick: (index: number) => void;
