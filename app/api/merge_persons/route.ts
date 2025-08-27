@@ -124,28 +124,52 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
 
       // Step 3: Handle persons table - merge image_ids arrays
       // First, get the image_ids from the person being merged
-      const getMergePersonImageIdsQuery = `
-        SELECT image_ids
-        FROM persons
-        WHERE id = $1::uuid
-      `;
-      
-      const mergePersonResult = await client.query(getMergePersonImageIdsQuery, [merge_person_id]);
-      const mergePersonImageIds = mergePersonResult.rows[0]?.image_ids || [];
+      const getPersonsQuery = `
+          SELECT id, image_ids, thumbnail, quality_score
+          FROM persons
+          WHERE id IN ($1::uuid, $2::uuid)
+        `;
 
-      let mergedImageIdsCount = 0;
-      
-      if (mergePersonImageIds.length > 0) {
-        // Update the target person's image_ids by appending the merge person's image_ids
-        const updateTargetPersonImageIdsQuery = `
-          UPDATE persons 
-          SET image_ids = COALESCE(image_ids, '{}') || $2::uuid[]
+        const personsResult = await client.query(getPersonsQuery, [merge_person_id, merge_into_person_id]);
+
+        // Extract both records
+        const mergePerson = personsResult.rows.find(r => r.id === merge_person_id);
+        const targetPerson = personsResult.rows.find(r => r.id === merge_into_person_id);
+
+        // Merge image_ids
+        const mergedImageIds = [
+          ...(targetPerson?.image_ids || []),
+          ...(mergePerson?.image_ids || [])
+        ];
+
+        // Deduplicate UUIDs
+        const dedupedImageIds = [...new Set(mergedImageIds.map((id: string) => id.toString()))];
+        const mergedImageIdsCount = (mergePerson?.image_ids?.length || 0);
+
+        // Decide thumbnail based on higher quality_score
+        let newThumbnail = targetPerson?.thumbnail;
+        let newQualityScore = targetPerson?.quality_score;
+
+        if ((mergePerson?.quality_score || 0) > (targetPerson?.quality_score || 0)) {
+          newThumbnail = mergePerson?.thumbnail;
+          newQualityScore = mergePerson?.quality_score;
+        }
+
+        // Update target person
+        const updateTargetPersonQuery = `
+          UPDATE persons
+          SET image_ids = $2::uuid[],
+              thumbnail = $3,
+              quality_score = $4
           WHERE id = $1::uuid
         `;
-        
-        await client.query(updateTargetPersonImageIdsQuery, [merge_into_person_id, mergePersonImageIds]);
-        mergedImageIdsCount = mergePersonImageIds.length;
-      }
+
+        await client.query(updateTargetPersonQuery, [
+          merge_into_person_id,
+          dedupedImageIds,
+          newThumbnail,
+          newQualityScore
+        ]);
 
       // Delete the person being merged from persons table
       const deleteFromPersonsQuery = `

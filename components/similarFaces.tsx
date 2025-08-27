@@ -93,17 +93,17 @@ export default function SimilarFacesList() {
                                 </div>
                             )}
                             <div>
+
+                                <h2 className="font-bold text-lg text-blue-600">
+                                    {person.sim_faces.length} similar person{person.sim_faces.length !== 1 ? 's' : ''} found
+                                </h2>
+
                                 <Link
                                     href={`/gallery-person?personId=${person.person_id}&groupId=${groupId}`}
                                     className="hover:underline"
-                                >
-                                    <h2 className="font-bold text-lg text-blue-600">
-                                        Person ID: {person.person_id}
-                                    </h2>
-                                </Link>
-                                <p className="text-sm text-gray-600">
-                                    {person.sim_faces.length} similar person{person.sim_faces.length !== 1 ? 's' : ''} found
-                                </p>
+                                > <p className="text-sm text-gray-600">
+                                        View Images
+                                    </p></Link>
                             </div>
                         </div>
 
@@ -116,7 +116,7 @@ export default function SimilarFacesList() {
                                         <div key={simFace.sim_person_id}><Link
                                             href={`/gallery-person?personId=${simFace.sim_person_id}&groupId=${groupId}`}
 
-                                            className="flex flex-col items-center text-sm hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                                            className="flex flex-col text-sm hover:bg-gray-50 p-2 rounded-lg transition-colors"
                                         >
                                             {simFace.thumb_img_byte ? (
                                                 <img
@@ -129,14 +129,15 @@ export default function SimilarFacesList() {
                                                     No Image
                                                 </div>
                                             )}
-                                            <span className="mt-2 text-xs text-center break-words max-w-full text-blue-600 hover:text-blue-800">
+                                            {/* <span className="mt-2 text-xs text-center break-words max-w-full text-blue-600 hover:text-blue-800">
                                                 {simFace.sim_person_id.length > 8
                                                     ? `${simFace.sim_person_id.substring(0, 8)}...`
                                                     : simFace.sim_person_id
                                                 }
-                                            </span>
+                                            </span> */}
+                                            <span className="text-blue-600 font-semibold">View Images</span>
                                         </Link>
-                                            <button onClick={() => { merge(person.person_id, simFace.sim_person_id) }}>Merge</button>
+                                            <button className="bg-blue-500 px-4 py-2 text-white rounded m-auto" onClick={() => { merge(person.person_id, simFace.sim_person_id) }}>Merge</button>
                                         </div>
                                     ))}
                                 </div>
