@@ -39,6 +39,17 @@ WHERE group_id = ${groupId} order by name;
 
     client.release();
 
+    if(result.rows.length == 0){
+          const queryP = `
+SELECT count(*) as count from images WHERE group_id = ${groupId} and status != 'cooling';
+
+    `;
+        const res = await client.query(queryP);
+    if(res.rows[0].count > 0){
+      return NextResponse.json([], { status: 202 });
+    }
+    }
+
     // Convert Buffer -> base64 string
     const formattedRows = result.rows.map((row) => ({
       person_id: row.id,

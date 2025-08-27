@@ -207,13 +207,13 @@ export default function ImageUploader() {
                 onChange={handleFileChange}
                 disabled={uploading}
             />
-            <button
+            {session?.user?.id && <button
                 onClick={handleUpload}
                 disabled={uploading || selectedFiles.length === 0}
                 className="bg-blue-600 text-white px-4 py-2 rounded disabled:bg-gray-400"
             >
                 {uploading ? 'Uploading...' : 'Upload Images'}
-            </button>
+            </button>}
 
             {uploading && (
                 <>

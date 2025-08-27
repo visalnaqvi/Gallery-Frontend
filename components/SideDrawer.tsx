@@ -38,10 +38,10 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
 
     // Fetch groups when drawer opens
     useEffect(() => {
-        if (isOpen && !isHomePage && groups.length === 0) {
+        if (isOpen && !isHomePage && groups.length === 0 && session?.user?.id) {
             fetchGroups();
         }
-    }, [isOpen, isHomePage, session?.user.id]);
+    }, [isOpen, isHomePage, session?.user?.id]);
 
     // Auto-expand only current group and collapse others
     useEffect(() => {

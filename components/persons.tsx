@@ -22,16 +22,19 @@ export default function PersonThumbnails({ pageLink }: props) {
     const [isForbidden, setIsForbidden] = useState<boolean>(false)
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId"); // 👈 get query param
-
+    const [isProcessing, setIsProcessing] = useState<boolean>(false)
     useEffect(() => {
         const fetchPersons = async () => {
             if (!groupId) return; // don’t fetch if no groupId
 
             try {
                 const res = await fetch(`/api/persons?groupId=${groupId}`);
-                if (res.status === 403) [
+                if (res.status === 403) {
                     setIsForbidden(true)
-                ]
+                }
+                if (res.status === 202) {
+                    setIsProcessing(true)
+                }
                 if (res.status !== 200) {
                     return
                 }
@@ -50,6 +53,9 @@ export default function PersonThumbnails({ pageLink }: props) {
     }, [groupId]); // 👈 re-run when groupId changes
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
+    }
+    if (isProcessing) {
+        return <InfoToast loading={true} message="We are processing your images and will be available shortly." />;
     }
     if (!groupId) return <p style={{ color: "red" }}>Missing groupId</p>;
     if (loading) return <InfoToast loading={true} message="Loading..." />;
