@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import InfoToast from "@/components/infoToast";
+import Switch from "./gallery/switch";
 
 interface Person {
     person_id: string;
@@ -13,9 +14,10 @@ interface Person {
 
 type props = {
     pageLink: string;
+    isPublic: boolean;
 }
 
-export default function PersonThumbnails({ pageLink }: props) {
+export default function PersonThumbnails({ pageLink, isPublic }: props) {
     const [persons, setPersons] = useState<Person[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -63,6 +65,10 @@ export default function PersonThumbnails({ pageLink }: props) {
 
     return (
         <div style={{ padding: "20px", margin: "auto" }}>
+            {/* {
+                isPublic &&
+                <Switch groupId={groupId} />
+            } */}
             <h2 className="font-semibold text-[30px] mb-[20px]">{persons.length} Persons in Group {groupId}</h2>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", margin: "auto" }}>
                 {persons.map((p) => (

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { ImageItem } from "@/types/ImageItem";
 import { ClipboardCopy } from "lucide-react";
+import Switch from "./switch";
 
 type GalleryGridProps = {
     handleImageClick: (index: number) => void;
@@ -12,11 +13,13 @@ type GalleryGridProps = {
     groupId: string | null;
     personId: string | null;
     isPerson: boolean;
+    isPublic: boolean;
 };
 
-export default function GalleryGrid({ handleImageClick, images, sorting, setSorting, groupId, personId, isPerson }: GalleryGridProps) {
+export default function GalleryGrid({ handleImageClick, images, sorting, setSorting, groupId, personId, isPerson, isPublic }: GalleryGridProps) {
     return (
         <>
+
             {/* Sorting Dropdown */}
             <div className="flex justify-end items-center p-4">
                 <div className="flex justify-end items-center mr-2">

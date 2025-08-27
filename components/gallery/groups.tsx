@@ -7,6 +7,7 @@ import "react-image-gallery/styles/css/image-gallery.css";
 import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
 import InfoToast from "@/components/infoToast";
+import Switch from "./switch";
 
 type ApiResponse = {
     images: ImageItem[];
@@ -14,7 +15,7 @@ type ApiResponse = {
     hotImages: number;
 };
 
-export default function Gallery() {
+export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
     const router = useRouter();
@@ -308,7 +309,10 @@ export default function Gallery() {
                     `Your recent uploaded ${hotImages} images are being processed and will be available shortly...`
                 } />
             }
-
+            {/* {
+                isPublic &&
+                <Switch groupId={groupId} />
+            } */}
             <GalleryGrid
                 handleImageClick={handleImageClick}
                 images={images}
@@ -317,6 +321,7 @@ export default function Gallery() {
                 groupId={groupId}
                 isPerson={false}
                 personId={null}
+                isPublic={isPublic}
             />
 
             {loading && (

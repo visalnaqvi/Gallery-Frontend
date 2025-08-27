@@ -8,6 +8,7 @@ import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
 import { ImageItem } from "@/types/ImageItem";
 import { Pencil, Check, X } from "lucide-react"; import InfoToast from "@/components/infoToast";
+import Switch from "./switch";
 ``
 interface Person {
     person_id: string;
@@ -15,7 +16,7 @@ interface Person {
     totalImages: number;
     face_thumb_bytes: string; // base64 string
 }
-export default function Gallery() {
+export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
     const personId = searchParams.get("personId");
@@ -280,8 +281,11 @@ export default function Gallery() {
                     </div>
                 </div>
             )}
-            <GalleryGrid isPerson={true} personId={personId} groupId={groupId} handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
-
+            <GalleryGrid isPublic={isPublic} isPerson={true} personId={personId} groupId={groupId} handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
+            {/* {
+                isPublic &&
+                <Switch groupId={groupId} />
+            } */}
             {loading && (
                 <InfoToast loading={true} message="Loading Images" />
             )}
