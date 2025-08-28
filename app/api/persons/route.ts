@@ -31,7 +31,7 @@ SELECT
     thumbnail,
     name
 FROM persons
-WHERE group_id = ${groupId} order by name;
+WHERE group_id = ${groupId} and quality_score >= 0.1 order by name;
 
     `;
     
