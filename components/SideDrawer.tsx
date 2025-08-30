@@ -42,7 +42,11 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             fetchGroups();
         }
     }, [isOpen, isHomePage, session?.user?.id]);
-
+    useEffect(() => {
+        if (isOpen && window.innerWidth < 768) {
+            onClose();
+        }
+    }, [pathname]);
     // Auto-expand only current group and collapse others
     useEffect(() => {
         if (groupId) {

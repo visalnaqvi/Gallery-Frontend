@@ -5,10 +5,12 @@
     justify-content: center;
     align-items: center;
     background-color: #f8f8f8;
+    flex-direction: column;
 }
 
 .formHolder{
     width: 60%;
+    min-width: 800px;
     height: 80%;
     display: flex;
     justify-content: space-between;
@@ -34,9 +36,7 @@
     padding: 50px;
     width: 50%;
 }
-.switch{
-    margin-top: 60px;
-}
+
 
 .switch span{
     font-weight: 900;
@@ -46,4 +46,34 @@
 
 .switch span:hover{
     opacity: 0.8;
+}
+
+@media only screen and (max-width:800px){
+    .right{
+        display: none;
+    }
+
+    .left{
+        width: 100%;
+    }
+
+    .formHolder{
+        min-width: auto;
+    }
+}
+
+@media only screen and (max-width:600px){
+
+    .formHolder{
+        width: 95vw;
+    }
+}
+
+@media only screen and (max-width:400px){
+
+
+    .left{
+        padding: 20px;
+    }
+
 }

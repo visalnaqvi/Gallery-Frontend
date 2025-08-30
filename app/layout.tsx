@@ -43,7 +43,7 @@ export default function RootLayout({
                 <header className="bg-blue-500 flex items-center justify-between p-4 fixed w-full z-20">
                   {/* Left: ham menu + logo */}
                   <div className="flex items-center gap-4">
-                    {!isHomePage && (
+                    {!isHomePage && !isPublic && (
                       <button
                         onClick={() => setDrawerOpen(!drawerOpen)}
                         className="text-white hover:bg-blue-600 p-1 rounded"

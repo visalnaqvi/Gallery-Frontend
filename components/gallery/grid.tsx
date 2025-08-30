@@ -30,11 +30,11 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         id="sort"
                         value={sorting}
                         onChange={(e) => setSorting(e.target.value)}
-                        className="border rounded-lg px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="bg-blue-100 rounded-lg px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                        <option value="date_taken">Date Taken</option>
-                        <option value="filename">Name</option>
-                        <option value="uploaded_at">Upload Date</option>
+                        <option className="bg-white" value="date_taken">Date Taken</option>
+                        <option className="bg-white" value="filename">Name</option>
+                        <option className="bg-white" value="uploaded_at">Upload Date</option>
                     </select>
                 </div>
 
@@ -50,12 +50,12 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         className="flex justify-center items-center bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 transition"
                     >
                         <ClipboardCopy size={16} className="mr-2 mb-1" />
-                        Copy Sharable Link
+                        <span className="hidden md:block">Copy Sharable Link</span>
                     </button>
                 </div>}
             </div>
             {/* Image Grid */}
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+            <div className="p-4 grid grid-cols-4 md:grid-cols-6 gap-2">
                 {images.map((image, idx) => (
                     <div
                         key={`${image.thumbnail_location}-${idx}`}
@@ -66,7 +66,6 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                             src={image.thumbnail_location}
                             alt={`group image ${idx}`}
                             fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 16.67vw"
                             className="object-cover object-top hover:scale-105 transition-transform duration-300"
                             priority={idx < 12}
                         />

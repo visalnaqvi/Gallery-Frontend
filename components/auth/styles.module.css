@@ -35,3 +35,40 @@
     cursor: pointer;
     font-size: 12px;
 }
+
+.errorMsg {
+  color: red;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.passToggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #555;
+}
+
+.errorBtn {
+  background-color: red !important;
+  border-color: red !important;
+}
+
+.inputWrapper {
+  position: relative;
+  width: 100%;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #555;
+}
+
+.input {
+  padding-left: 35px; /* space for icon */
+}

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const groupQuery = await client.query(
       `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access
        FROM groups
-       WHERE id = ANY($1)`,
+       WHERE id = ANY($1) order by id`,
       [groupIds]
     );
 

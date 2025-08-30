@@ -14,13 +14,13 @@
     width: 30%;
     border: 1px solid #dbdbdb;
     border-radius: 10px;
-    max-width: 300px;
+    /* max-width: 300px; */
     box-shadow: 10px 10px 40px #00000010;
     margin:10px;
     position: relative;
     transition: 0.3s ease;
     cursor: pointer;
-
+    min-width: 300px;
 }
 .groupCard:hover{
     box-shadow: 10px 10px 50px #00000030;
@@ -92,4 +92,3 @@
 .uploadBtn:hover{
     background-color: #0a3ead;
 }
-

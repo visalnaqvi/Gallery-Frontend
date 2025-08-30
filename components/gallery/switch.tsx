@@ -17,7 +17,7 @@ export default function Switch() {
     }
 
     return (
-        <div className="bg-white flex gap-4 border-b py-2 px-4 fixed bottom-[20px] right-[20px] rounded-full shadow-lg border border-[#dbdbdb]">
+        <div className="bg-white flex gap-4 border-b py-2 px-4 fixed bottom-[20px] right-[20px] rounded-full shadow-lg border border-[#dbdbdb] z-100">
             {/* Images Tab */}
             <Link
                 href={`/public/gallery-groups?groupId=${groupId}`}

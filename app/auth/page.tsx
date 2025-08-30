@@ -16,15 +16,22 @@ export default function AuthPage() {
                 <div className={styles.left}>
 
                     {mode === 'login' ? <LoginForm /> : <SignupForm />}
+                    <br></br>
+                    <br></br>
                     <div className={styles.switch}>
 
                         {mode === 'login' ? <p>Don't have an account? <span onClick={() => setMode('signup')}>Sign Up</span></p> : <p>Already have an account? <span onClick={() => setMode('login')}>Login In</span></p>}
                     </div>
+
                 </div>
                 <div className={styles.right}>
                     <Image src={img} alt='login'></Image>
                 </div>
             </div>
+            <br></br>
+            <br></br>
+            <p className="fixed bottom-[50px] m-2 text-center">Not able to login? <span className='text-blue-600 font-semibold'>Connect with us at +91-8920152023</span></p>
+
         </div>
     );
 }
