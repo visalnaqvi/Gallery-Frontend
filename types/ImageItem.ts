@@ -6,4 +6,5 @@ export type ImageItem = {
     date_taken:string;
 size:number;
 uploaded_at:string;    
+highlight:boolean
 };

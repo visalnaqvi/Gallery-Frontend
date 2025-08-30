@@ -10,7 +10,6 @@ const pool = new Pool({
 
 // helper to refresh signed url
 async function refreshSignedUrl(imgId: string) {
-  
   try {
     const file = storage.bucket().file("compressed_" + imgId);
 
@@ -23,7 +22,7 @@ async function refreshSignedUrl(imgId: string) {
     // expiry time 10 min before actual
     const expireTime = new Date(Date.now() + (8 * 60 - 10) * 60 * 1000);
 
-    // run DB update in background (don’t await)
+    // run DB update in background (don't await)
     pool.query(
       `UPDATE images 
        SET signed_url = $1, expire_time = $2 
@@ -43,64 +42,61 @@ async function refreshSignedUrl(imgId: string) {
 }
 
 export async function GET(req: NextRequest) {
-    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const personId = searchParams.get("personId");
+    const page = parseInt(searchParams.get("page") || "0");
+    const sorting = searchParams.get("sorting") || "date_taken";
+    const limit = 20; // Images per page
 
     if (!groupId) {
       return NextResponse.json({ error: "Missing groupId" }, { status: 400 });
     }
-        if (!personId) {
+    if (!personId) {
       return NextResponse.json({ error: "Missing personId" }, { status: 400 });
     }
 
     const client = await pool.connect();
     
     try {
-                const token = await getToken({ req, secret: process.env.JWT_SECRET });
+      const token = await getToken({ req, secret: process.env.JWT_SECRET });
 
       if (!token) {
-          const res = await client.query(`
-            select access from groups where id = $1
-            ` , [groupId])
+        const res = await client.query(`
+          SELECT access FROM groups WHERE id = $1
+        `, [groupId]);
 
-            if(res.rows[0].access.toLowerCase() != 'public'){
-                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-            }
-
-          
+        if (res.rows[0].access.toLowerCase() !== 'public') {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-      console.log("person id" , personId)
-     
-        console.log("ftching using personid")
-        const resultPersons = await client.query(
-        `SELECT image_ids 
-         FROM persons 
-         WHERE id = $1`,
-        [personId] 
+      }
+
+      console.log("Fetching images for person:", personId, "page:", page);
+
+      // Determine sorting column
+      let orderBy = "i.uploaded_at DESC";
+      if (sorting === "date_taken") {
+        orderBy = "i.date_taken DESC";
+      } else if (sorting === "filename") {
+        orderBy = "i.filename ASC";
+      }
+
+      const offset = page * limit;
+
+      // Fetch images using JOIN with faces table for pagination
+      const result = await client.query(
+        `SELECT i.id, i.filename, i.thumb_byte, i.uploaded_at, i.size, i.date_taken, i.signed_url, i.expire_time
+         FROM images i
+         INNER JOIN faces f ON i.id = f.image_id
+         WHERE i.group_id = $1 AND f.person_id = $2
+         ORDER BY ${orderBy}
+         LIMIT $3 OFFSET $4`,
+        [groupId, personId, limit + 1, offset] // +1 to check if there are more
       );
 
-      const imageIds = resultPersons.rows[0].image_ids;
-       if (imageIds.length === 0) {
-          return NextResponse.json({ images: [], hasMore: false });
-        }
-      const result=await client.query(
-    `SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time
-     FROM images
-     WHERE group_id = $1
-       AND id = ANY($2)
-     ORDER BY uploaded_at DESC`,
-    [groupId, imageIds]
-  );
-      
-      const imagesFromDB =  result.rows;
-
-      const refreshTasks: Promise<any>[] = [];
+      const hasMore = result.rows.length > limit;
+      const imagesFromDB = hasMore ? result.rows.slice(0, -1) : result.rows;
 
       const images = await Promise.all(
         imagesFromDB.map(async (img) => {
@@ -110,13 +106,13 @@ export async function GET(req: NextRequest) {
           // if missing or expired, refresh immediately (await so response has URL)
           if (!signedUrl || !expireTime || expireTime < new Date()) {
             // generate fresh signed url immediately
-            const refreshed = await refreshSignedUrl(img.id); // now does DB update in background
+            const refreshed = await refreshSignedUrl(img.id);
             if (refreshed) {
               signedUrl = refreshed.signedUrl;
               expireTime = refreshed.expireTime;
             }
           } else {
-            // if close to expiry, refresh in background (don’t block response)
+            // if close to expiry, refresh in background (don't block response)
             const timeLeft = expireTime.getTime() - Date.now();
             if (timeLeft < 15 * 60 * 1000) {
               refreshSignedUrl(img.id); // fire and forget
@@ -138,17 +134,12 @@ export async function GET(req: NextRequest) {
         })
       );
 
-      // run background refreshes (don’t block API)
-      Promise.all(refreshTasks).then(() =>
-        console.log(`✅ Background refresh done for ${refreshTasks.length} URLs`)
-      );
-
-      return NextResponse.json(images);
+      return NextResponse.json({ images, hasMore });
     } finally {
       client.release();
     }
   } catch (err: any) {
-    console.error("❌ Error in GET /api/images:", err);
+    console.error("❌ Error in GET /api/persons/getPersonImages:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

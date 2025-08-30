@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
+    const mode = searchParams.get("mode");
     const sorting = searchParams.get("sorting") || "uploaded_at"; // fallback
     const page = parseInt(searchParams.get("page") || "0", 10);
     const limit = 10;
@@ -55,7 +56,8 @@ export async function GET(req: NextRequest) {
     }
 
     const client = await pool.connect();
-    
+    const deleteClause  = mode == 'bin' ? "IS NOT NULL" : "IS NULL";
+    const highlightClause  = mode == 'highlight' ? "AND highlight = true" : "";
     try {
           const token = await getToken({ req, secret: process.env.JWT_SECRET });
         if (!token) {
@@ -72,16 +74,19 @@ export async function GET(req: NextRequest) {
       console.log("Fetching images (not hot) + hot count");
 
       // fetch paginated images (excluding hot)
-      const result = await client.query(
-        `
-          SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status 
-          FROM images 
-          WHERE group_id = $1 AND status != 'hot'
-          ORDER BY ${sorting} DESC
-          LIMIT $2 OFFSET $3
-        `,
-        [groupId, limit + 1, offset] // only values go in params
-      );
+const result = await client.query(
+  `
+    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status , highlight 
+    FROM images 
+    WHERE group_id = $1 
+      AND status != 'hot' 
+      AND delete_at ${deleteClause}
+      ${highlightClause}
+    ORDER BY ${sorting} DESC
+    LIMIT $2 OFFSET $3
+  `,
+  [groupId, limit + 1, offset]
+);
 
       // fetch hot image count
       const hotResult = await client.query(
@@ -130,6 +135,7 @@ export async function GET(req: NextRequest) {
             date_taken: img.date_taken,
             compressed_location: signedUrl,
             expire_time: expireTime,
+            highlight:img.highlight
           };
         })
       );
@@ -144,6 +150,77 @@ export async function GET(req: NextRequest) {
     }
   } catch (err: any) {
     console.error("❌ Error in GET /api/images:", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const imageId = searchParams.get("imageId");
+
+    if (!imageId) {
+      return NextResponse.json({ error: "Missing imageId" }, { status: 400 });
+    }
+
+    const client = await pool.connect();
+    try {
+      // update deleted_at = now + 24 hr
+      await client.query(
+        `
+        UPDATE images
+        SET delete_at = NOW() + interval '24 hours'
+        WHERE id = $1
+        `,
+        [imageId]
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Image ${imageId} marked for deletion (in 24 hours).`,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (err: any) {
+    console.error("❌ Error in DELETE /api/images:", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const imageId = searchParams.get("imageId");
+    const action = searchParams.get("action");
+
+    if (!imageId) {
+      return NextResponse.json({ error: "Missing imageId" }, { status: 400 });
+    }
+
+    const client = await pool.connect();
+    const isHighlight = action == 'add'
+    try {
+      // update deleted_at = now + 24 hr
+      await client.query(
+        `
+        UPDATE images
+        SET highlight = ${isHighlight}
+        WHERE id = $1
+        `,
+        [imageId]
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Image ${imageId} marked as highlight.`,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (err: any) {
+    console.error("❌ Error in marked as highlight:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

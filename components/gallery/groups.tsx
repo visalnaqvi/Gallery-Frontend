@@ -8,7 +8,7 @@ import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
 import InfoToast from "@/components/infoToast";
 import Switch from "./switch";
-import { Info, Trash2, Download, X } from "lucide-react";
+import { Info, Trash2, Download, X, HeartIcon } from "lucide-react";
 
 type ApiResponse = {
     images: ImageItem[];
@@ -31,11 +31,11 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
-
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // Add ref to track current groupId to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
-
+    const [mode, setMode] = useState("gallery")
     // New states for carousel icons
     const [showIcons, setShowIcons] = useState(true);
     const [showImageInfo, setShowImageInfo] = useState(false);
@@ -128,7 +128,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
 
         setLoading(true);
         try {
-            const res = await fetch(`/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}`);
+            const res = await fetch(`/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}&mode=${mode}`);
             const data: ApiResponse = await res.json();
             if (res.status === 403) {
                 setIsForbidden(true);
@@ -156,7 +156,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             setLoading(false);
             cache.current.loadingStates.set(requestKey, false);
         }
-    }, [page, hasMore, loading, preloadImage]);
+    }, [page, hasMore, loading, preloadImage, mode]);
 
     // ✅ Effect to handle groupId changes
     useEffect(() => {
@@ -188,7 +188,22 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                 fetchImages(0, true);
             }, 0);
         }
+
+        if (currentSortingRef.current !== sorting) {
+            console.log("Sorting changed from", currentSortingRef.current, "to", sorting);
+            currentSortingRef.current = sorting;
+            resetState();
+            // Use setTimeout to ensure state is reset before fetching
+            setTimeout(() => {
+                fetchImages(0, true);
+            }, 0);
+        }
     }, [sorting, groupId, resetState]);
+
+    useEffect(() => {
+        resetState();
+        fetchImages(0, true)
+    }, [mode, resetState, groupId])
 
     // Helper function to download from Firebase URL with CORS handling
     const downloadFromFirebaseUrl = useCallback(async (url: string, filename: string) => {
@@ -323,7 +338,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
         [images, hasMore, loading, preloadImage, fetchImages]
     );
 
-    if (!groupId) return <p>No groupId provided in URL</p>;
+
 
     // ✅ Stable gallery items
     const galleryItems: ReactImageGalleryItem[] = useMemo(
@@ -338,6 +353,69 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
         [images]
     );
 
+    const currentImage = images[currentIndex];
+    const handleConfirmDelete = useCallback(async () => {
+        if (!currentImage?.id) return;
+
+        try {
+            const res = await fetch(`/api/groups/images?imageId=${currentImage.id}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to delete:", err.error);
+                alert("Failed to schedule delete.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Delete scheduled:", data);
+            alert("Image will be deleted in 24 hours.");
+            setShowDeleteConfirm(false);
+        } catch (err) {
+            console.error("Error deleting image:", err);
+            alert("Something went wrong.");
+        }
+    }, [currentImage]);
+
+    const handleHighlightUpdate = useCallback(async () => {
+        if (!currentImage?.id) return;
+
+        try {
+            // Use the correct property name (highlight instead of hightlight)
+            const action = currentImage.highlight ? "remove" : "add";
+
+            const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to update highlight:", err.error);
+                alert("Failed to update highlight.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Highlight updated:", data);
+
+            // Update local state to reflect the change
+            setImages(prevImages =>
+                prevImages.map(img =>
+                    img.id === currentImage.id
+                        ? { ...img, highlight: !img.highlight }
+                        : img
+                )
+            );
+
+
+        } catch (err) {
+            console.error("Error updating highlight:", err);
+            alert("Something went wrong.");
+        }
+    }, [currentImage, setImages]);
+
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
@@ -348,7 +426,12 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
         );
     }
 
-    const currentImage = images[currentIndex];
+    if (!groupId) {
+        return (
+            <InfoToast loading={false} message="No groupId provided in URL" />
+        )
+    };
+
 
     return (
         <>
@@ -371,6 +454,9 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                 isPerson={false}
                 personId={null}
                 isPublic={isPublic}
+                setMode={setMode}
+                mode={mode}
+                loading={loading}
             />
 
             {loading && (
@@ -417,26 +503,35 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                 setShowImageInfo(!showImageInfo);
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
+                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
                             title="Image Info"
                         >
                             <Info size={20} />
                         </button>
-
+                        {/* Heart icon */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleHighlightUpdate();
+                                resetHideTimer();
+                            }}
+                            className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
+                            title="Image Info"
+                        >
+                            <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
+                        </button>
                         {/* Delete Icon */}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                // TODO: Implement delete functionality
-                                console.log('Delete clicked for image:', currentImage?.id);
+                                setShowDeleteConfirm(true);
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-red-600 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
+                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
                             title="Delete Image"
                         >
                             <Trash2 size={20} />
                         </button>
-
                         {/* Download Compressed Icon */}
                         <button
                             onClick={(e) => {
@@ -444,7 +539,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                 downloadCompressed();
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-green-600 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
                             title="Download Compressed"
                         >
                             <Download size={20} />
@@ -457,13 +552,41 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                 downloadOriginal();
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-purple-600 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
+                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
                             title="Download Original"
                         >
                             <Download size={20} />
                         </button>
                     </div>
-
+                    {showDeleteConfirm && (
+                        <div
+                            className="absolute inset-0 z-50 flex items-center justify-center bg-black/65"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                                    Confirm Deletion
+                                </h3>
+                                <p className="text-gray-600 mb-6">
+                                    Are you sure you want to delete this image? This action will schedule the image for deletion in 24 hours.
+                                </p>
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => setShowDeleteConfirm(false)}
+                                        className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleConfirmDelete}
+                                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* Image Info Panel */}
                     {showImageInfo && currentImage && (
                         <div

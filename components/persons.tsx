@@ -27,6 +27,9 @@ export default function PersonThumbnails({ pageLink, isPublic }: props) {
     const [isProcessing, setIsProcessing] = useState<boolean>(false)
     useEffect(() => {
         const fetchPersons = async () => {
+            setLoading(true)
+            setIsForbidden(false)
+            setIsProcessing(false)
             if (!groupId) return; // don’t fetch if no groupId
 
             try {
@@ -40,6 +43,7 @@ export default function PersonThumbnails({ pageLink, isPublic }: props) {
                 if (res.status !== 200) {
                     return
                 }
+
                 if (!res.ok) throw new Error("Failed to fetch persons");
 
                 const data: Person[] = await res.json();

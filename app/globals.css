@@ -13,16 +13,20 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #1d4ed8; /* darker blue */
+  background-color: #95b2ff; /* darker blue */
   border-radius: 9999px; /* fully rounded */
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: #2563eb; /* lighter shade on hover */
+  background-color: #ffffff; /* lighter shade on hover */
 }
 
 /* For Firefox */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #1d4ed8 transparent;
+  scrollbar-color: #95b2ff transparent;
+}
+
+button{
+  cursor: pointer;
 }

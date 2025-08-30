@@ -32,8 +32,8 @@ SELECT
     name
 FROM persons
 WHERE group_id = ${groupId}
-  AND quality_score >= 0.8
-ORDER BY name, cardinality(image_ids) DESC;
+  AND quality_score >= 0.8 and total_images > 1
+ORDER BY name, total_images DESC;
 ;
     `;
     
