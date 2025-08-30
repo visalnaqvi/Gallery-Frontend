@@ -2,7 +2,7 @@
 import { GridLoader } from "react-spinners";
 import { CheckCircle } from "lucide-react";
 type props = {
-    loading: boolean; message: string; success: boolean
+    loading: boolean; message: string; success?: boolean
 }
 
 export default function InfoToast({ loading, message, success = false }: props) {
