@@ -2,3 +2,27 @@
 :root {
   --primary-blue: #2b7fff;
 }
+
+/* Apply only inside SideDrawer */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px; /* thinner scrollbar */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent; /* make track less visible */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #1d4ed8; /* darker blue */
+  border-radius: 9999px; /* fully rounded */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #2563eb; /* lighter shade on hover */
+}
+
+/* For Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #1d4ed8 transparent;
+}

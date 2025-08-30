@@ -155,7 +155,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* All Groups Header */}
                 <div className="px-4 py-3 border-b border-blue-500">
                     <div className="flex items-center gap-2">

@@ -7,15 +7,17 @@ import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
 import { ImageItem } from "@/types/ImageItem";
-import { Pencil, Check, X } from "lucide-react"; import InfoToast from "@/components/infoToast";
+import { Pencil, Check, X, Info, Trash2, Download } from "lucide-react";
+import InfoToast from "@/components/infoToast";
 import Switch from "./switch";
-``
+
 interface Person {
     person_id: string;
     name: string;
     totalImages: number;
     face_thumb_bytes: string; // base64 string
 }
+
 export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
@@ -28,8 +30,14 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState("");
     const loadedImagesRef = useRef<Set<string>>(new Set());
-    const [sorting, setSorting] = useState<string>("date_taken")
-    const [isForbidden, setIsForbidden] = useState<boolean>(false)
+    const [sorting, setSorting] = useState<string>("date_taken");
+    const [isForbidden, setIsForbidden] = useState<boolean>(false);
+
+    // New states for carousel icons
+    const [showIcons, setShowIcons] = useState(true);
+    const [showImageInfo, setShowImageInfo] = useState(false);
+    const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
     // ✅ Preload images
     const preloadImage = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return Promise.resolve();
@@ -44,6 +52,39 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             img.src = src;
         });
     }, []);
+
+    // ✅ Auto-hide icons after 3 seconds
+    const resetHideTimer = useCallback(() => {
+        if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+        }
+        setShowIcons(true);
+        hideTimerRef.current = setTimeout(() => {
+            setShowIcons(false);
+        }, 3000);
+    }, []);
+
+    // ✅ Handle mouse movement to show/hide icons
+    const handleMouseMove = useCallback(() => {
+        resetHideTimer();
+    }, [resetHideTimer]);
+
+    // ✅ Convert bytes to MB
+    const formatFileSize = (bytes: number): string => {
+        const mb = bytes / (1024 * 1024);
+        return `${mb.toFixed(2)} MB`;
+    };
+
+    // ✅ Format date
+    const formatDate = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
 
     // ✅ Fetch all images once
     const fetchImages = useCallback(async () => {
@@ -62,11 +103,11 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                 `/api/persons/getPersonImages?groupId=${groupId}&personId=${personId}&sorting=${sorting}`
             );
             if (res.status === 403) {
-                setIsForbidden(true)
-                return
+                setIsForbidden(true);
+                return;
             }
             if (res.status != 200) {
-                return
+                return;
             }
             const data: ImageItem[] = await res.json();
 
@@ -86,23 +127,31 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
     // ✅ Close on Esc
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setIsOpen(false);
+            if (e.key === "Escape") {
+                setIsOpen(false);
+                setShowImageInfo(false);
+            }
         };
         if (isOpen) {
             document.addEventListener("keydown", handleEsc);
             document.body.style.overflow = "hidden";
+            resetHideTimer(); // Start auto-hide timer when carousel opens
         }
         return () => {
             document.removeEventListener("keydown", handleEsc);
             document.body.style.overflow = "unset";
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current);
+            }
         };
-    }, [isOpen]);
+    }, [isOpen, resetHideTimer]);
 
     // ✅ Open carousel
     const handleImageClick = useCallback(
         (idx: number) => {
             setCurrentIndex(idx);
             setIsOpen(true);
+            setShowImageInfo(false);
 
             const indicesToPreload = [idx - 2, idx - 1, idx, idx + 1, idx + 2].filter(
                 (i) => i >= 0 && i < images.length
@@ -126,6 +175,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             })),
         [images]
     );
+
     const downloadCompressed = useCallback(async () => {
         try {
             // Fetch the actual file as blob
@@ -193,17 +243,19 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             alert("Failed to update name");
         }
     };
+
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
     if (!groupId) return <p>No groupId provided in URL</p>;
+
+    const currentImage = images[currentIndex];
 
     return (
         <>
             {/* Grid */}
             {personDetails && (
                 <div className={"bg-blue-100 m-[10px] rounded-md flex items-center"}>
-
                     <div>
                         {personDetails.face_thumb_bytes ? (
                             <img
@@ -270,58 +322,149 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                     >
                                         <Pencil size={18} />
                                     </button>
-
                                 </>
                             )}
                         </div>
                         <div>
                             <p className="font-medium">Total Images: {personDetails.totalImages}</p>
-
                         </div>
                     </div>
                 </div>
             )}
-            <GalleryGrid isPublic={isPublic} isPerson={true} personId={personId} groupId={groupId} handleImageClick={handleImageClick} images={images} sorting={sorting} setSorting={setSorting} />
-            {/* {
-                isPublic &&
-                <Switch groupId={groupId} />
-            } */}
+            <GalleryGrid
+                isPublic={isPublic}
+                isPerson={true}
+                personId={personId}
+                groupId={groupId}
+                handleImageClick={handleImageClick}
+                images={images}
+                sorting={sorting}
+                setSorting={setSorting}
+            />
+
             {loading && (
                 <InfoToast loading={true} message="Loading Images" />
             )}
 
             {/* Fullscreen carousel */}
             {isOpen && (
-                <div className="fixed inset-0 bg-black z-50">
+                <div
+                    className="fixed inset-0 bg-black z-50"
+                    onMouseMove={handleMouseMove}
+                    onClick={() => setShowImageInfo(false)}
+                >
+                    {/* Close button */}
                     <button
                         onClick={() => setIsOpen(false)}
-                        className="absolute top-4 right-4 z-50 text-white text-3xl hover:text-gray-300 transition-colors duration-200 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center"
+                        className={`absolute top-4 right-4 z-50 text-white text-3xl hover:text-gray-300 transition-all duration-300 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center ${showIcons ? 'opacity-100' : 'opacity-0'
+                            }`}
                         aria-label="Close gallery"
                     >
                         ×
                     </button>
-                    <div className="absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+
+                    {/* Image counter */}
+                    <div className={`absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
+                        }`}>
                         {currentIndex + 1} / {images.length}
                     </div>
 
-                    {/* Download buttons positioned in bottom right */}
-                    <div className="absolute bottom-4 right-4 z-50 flex flex-col gap-2">
+                    {/* Action Icons */}
+                    <div className={`absolute bottom-4 right-4 z-50 flex gap-3 transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
+                        }`}>
+                        {/* Info Icon */}
                         <button
-                            onClick={downloadCompressed}
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors duration-200 shadow-lg"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowImageInfo(!showImageInfo);
+                                resetHideTimer();
+                            }}
+                            className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
+                            title="Image Info"
                         >
-                            Download Compressed
+                            <Info size={20} />
                         </button>
+
+                        {/* Delete Icon */}
                         <button
-                            onClick={downloadOriginal}
-                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                // TODO: Implement delete functionality
+                                console.log('Delete clicked for image:', currentImage?.id);
+                                resetHideTimer();
+                            }}
+                            className="p-3 bg-red-600 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
+                            title="Delete Image"
                         >
-                            Download Original
+                            <Trash2 size={20} />
+                        </button>
+
+                        {/* Download Compressed Icon */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                downloadCompressed();
+                                resetHideTimer();
+                            }}
+                            className="p-3 bg-green-600 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                            title="Download Compressed"
+                        >
+                            <Download size={20} />
+                        </button>
+
+                        {/* Download Original Icon */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOriginal();
+                                resetHideTimer();
+                            }}
+                            className="p-3 bg-purple-600 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
+                            title="Download Original"
+                        >
+                            <Download size={20} />
                         </button>
                     </div>
-                    <div className="absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
-                        {currentIndex + 1} / {images.length}
-                    </div>
+
+                    {/* Image Info Panel */}
+                    {showImageInfo && currentImage && (
+                        <div
+                            className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-80 text-white p-4 rounded-lg max-w-sm"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-start mb-2">
+                                <h3 className="text-lg font-semibold">Image Info</h3>
+                                <button
+                                    onClick={() => setShowImageInfo(false)}
+                                    className="text-gray-300 hover:text-white ml-2"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                                <div>
+                                    <span className="font-medium">Filename:</span>
+                                    <br />
+                                    <span className="text-gray-300">{currentImage.filename}</span>
+                                </div>
+                                <div>
+                                    <span className="font-medium">Size:</span>
+                                    <br />
+                                    <span className="text-gray-300">{formatFileSize(currentImage.size)}</span>
+                                </div>
+                                <div>
+                                    <span className="font-medium">Date Taken:</span>
+                                    <br />
+                                    <span className="text-gray-300">{formatDate(currentImage.date_taken)}</span>
+                                </div>
+                                <div>
+                                    <span className="font-medium">Uploaded:</span>
+                                    <br />
+                                    <span className="text-gray-300">{formatDate(currentImage.uploaded_at)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="h-full flex flex-col">
                         <div className="flex-1 relative">
@@ -338,6 +481,8 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                 slideInterval={0}
                                 onSlide={(index) => {
                                     setCurrentIndex(index);
+                                    setShowImageInfo(false); // Hide info when sliding
+                                    resetHideTimer(); // Reset timer on slide
                                     const indicesToPreload = [index - 1, index, index + 1].filter(
                                         (i) => i >= 0 && i < images.length
                                     );

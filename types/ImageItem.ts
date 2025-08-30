@@ -1,6 +1,9 @@
 export type ImageItem = {
-     id: string;
+    id: string;
     thumbnail_location: string;
     filename: string;
-    compressed_location: string;// already used in UI
+    compressed_location: string;
+    date_taken:string;
+size:number;
+uploaded_at:string;    
 };

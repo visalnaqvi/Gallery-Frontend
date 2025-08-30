@@ -30,7 +30,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         id="sort"
                         value={sorting}
                         onChange={(e) => setSorting(e.target.value)}
-                        className="bg-blue-100 rounded-lg px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="bg-blue-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                         <option className="bg-white" value="date_taken">Date Taken</option>
                         <option className="bg-white" value="filename">Name</option>
