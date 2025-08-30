@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const client = await pool.connect();
  
     const groupQuery = await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, plan_type , access , created_at
+      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, plan_type , access , created_at , delete_at
        FROM groups
        WHERE id = $1`,
       [groupId]
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
         last_image_uploaded_at:row.last_image_uploaded_at,
         plan_type:row.plan_type,
         access:row.access,
-        created_at:row.created_at
-
+        created_at:row.created_at,
+        delete_at:row.delete_at
     }));
 
     return NextResponse.json( formattedRows , { status: 200 });

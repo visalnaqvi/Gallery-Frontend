@@ -165,7 +165,7 @@ export default function UserProfile() {
                                 <p className="font-medium capitalize">{group.name}</p>
                                 <p className="text-sm text-gray-500">
                                     Images: {group.total_images} • Created:{" "}
-                                    {new Date(group.created_at).toLocaleDateString()}
+                                    {group.created_at ? new Date(group.created_at).toLocaleDateString() : "Not Available"}
                                 </p>
                             </div>
                             <button

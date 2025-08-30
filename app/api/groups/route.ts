@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     const groupQuery = await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access
+      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access , delete_at
        FROM groups
        WHERE id = ANY($1) order by id`,
       [groupIds]
@@ -59,7 +59,8 @@ export async function GET(req: NextRequest) {
         admin_user:row.admin_user,
         last_image_uploaded_at:row.last_image_uploaded_at,
         status:row.status,
-      access:row.access
+      access:row.access,
+      delete_at:row.delete_at
     }));
 
     return NextResponse.json({ groups: formattedRows }, { status: 200 });
@@ -151,5 +152,39 @@ export async function PATCH(req: NextRequest) {
   } catch (err) {
     console.error('Error updating group status:', err);
     return NextResponse.json({ error: 'Failed to update group status' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const groupId = searchParams.get("groupId");
+
+    if (!groupId) {
+      return NextResponse.json({ error: "Missing groupId" }, { status: 400 });
+    }
+
+    const client = await pool.connect();
+    try {
+      // update deleted_at = now + 24 hr
+      await client.query(
+        `
+        UPDATE groups
+        SET delete_at = NOW() + interval '24 hours'
+        WHERE id = $1
+        `,
+        [groupId]
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Group ${groupId} marked for deletion (in 24 hours).`,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (err: any) {
+    console.error("❌ Error in DELETE:", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

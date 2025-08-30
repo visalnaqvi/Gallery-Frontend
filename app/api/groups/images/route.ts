@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const mode = searchParams.get("mode");
     const sorting = searchParams.get("sorting") || "uploaded_at"; // fallback
     const page = parseInt(searchParams.get("page") || "0", 10);
-    const limit = 10;
+    const limit = 50;
     const offset = page * limit;
 
     if (!groupId) {
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       // fetch paginated images (excluding hot)
 const result = await client.query(
   `
-    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status , highlight 
+    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status , highlight , delete_at 
     FROM images 
     WHERE group_id = $1 
       AND status != 'hot' 
@@ -135,7 +135,8 @@ const result = await client.query(
             date_taken: img.date_taken,
             compressed_location: signedUrl,
             expire_time: expireTime,
-            highlight:img.highlight
+            highlight:img.highlight,
+            delete_at:img.delete_at
           };
         })
       );

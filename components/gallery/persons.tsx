@@ -7,7 +7,7 @@ import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
 import { ImageItem } from "@/types/ImageItem";
-import { Pencil, Check, X, Info, Trash2, Download } from "lucide-react";
+import { Pencil, Check, X, Info, Trash2, Download, HeartIcon, ArchiveRestore } from "lucide-react";
 import InfoToast from "@/components/infoToast";
 import Switch from "./switch";
 
@@ -39,7 +39,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const loadedImagesRef = useRef<Set<string>>(new Set());
     const [sorting, setSorting] = useState<string>("date_taken");
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
-    const LOAD_MORE_AHEAD = 10;
+    const LOAD_MORE_AHEAD = 50;
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     // Add ref to track current groupId and personId to prevent stale closures
@@ -394,7 +394,62 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             alert("Something went wrong.");
         }
     }, [currentImage]);
+    const handleHighlightUpdate = useCallback(async () => {
+        if (!currentImage?.id) return;
 
+        try {
+            // Use the correct property name (highlight instead of hightlight)
+            const action = currentImage.highlight ? "remove" : "add";
+
+            const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to update highlight:", err.error);
+                alert("Failed to update highlight.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Highlight updated:", data);
+
+            // Update local state to reflect the change
+            setImages(prevImages =>
+                prevImages.map(img =>
+                    img.id === currentImage.id
+                        ? { ...img, highlight: !img.highlight }
+                        : img
+                )
+            );
+
+
+        } catch (err) {
+            console.error("Error updating highlight:", err);
+            alert("Something went wrong.");
+        }
+    }, [currentImage, setImages]);
+    const handleRestoreGroup = useCallback(async () => {
+        if (!groupId) return;
+
+        try {
+            const res = await fetch(`/api/groups/images/restore?imageId=${currentImage.id}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to RESTORE:", err.error);
+                alert("Failed to RESTORE.");
+                return;
+            }
+            const data = await res.json();
+            alert("Image Resotred Successfully");
+        } catch (err) {
+            alert("Something went wrong.");
+        }
+    }, [groupId]);
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
@@ -550,19 +605,44 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                         >
                             <Info size={20} />
                         </button>
-
-                        {/* Delete Icon */}
+                        {/* Heart icon */}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setShowDeleteConfirm(true);
+                                handleHighlightUpdate();
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
-                            title="Delete Image"
+                            className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
+                            title="Image Info"
                         >
-                            <Trash2 size={20} />
+                            <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                         </button>
+                        {/* Delete Icon */}
+                        {currentImage && currentImage.delete_at ?
+
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRestoreGroup();
+                                    resetHideTimer();
+                                }}
+                                className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                                title="Restore Image"
+                            >
+                                <ArchiveRestore size={20} />
+                            </button>
+
+                            : <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowDeleteConfirm(true);
+                                    resetHideTimer();
+                                }}
+                                className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
+                                title="Delete Image"
+                            >
+                                <Trash2 size={20} />
+                            </button>}
 
                         {/* Download Compressed Icon */}
                         <button

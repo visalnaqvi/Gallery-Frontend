@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import InfoToast from "@/components/infoToast";
 
@@ -14,6 +14,7 @@ type GroupDetails = {
     plan_type: string;
     access: string;
     created_at: string;
+    delete_at: string
 };
 
 type User = {
@@ -28,6 +29,7 @@ export default function GroupSettingsComponent() {
 
     const [group, setGroup] = useState<GroupDetails | null>(null);
     const [users, setUsers] = useState<User[]>([]);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [loading, setLoading] = useState(true);
     const [form, setForm] = useState<any>({});
     const [newProfileFile, setNewProfileFile] = useState<File | null>(null);
@@ -149,13 +151,95 @@ export default function GroupSettingsComponent() {
             console.error("Error updating group:", err);
         }
     };
+    const handleConfirmDelete = useCallback(async () => {
+        if (!groupId) return;
 
+        try {
+            const res = await fetch(`/api/groups?groupId=${groupId}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to delete:", err.error);
+                alert("Failed to schedule delete.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Delete scheduled:", data);
+            alert("Group will be deleted in 24 hours.");
+            setShowDeleteConfirm(false);
+        } catch (err) {
+            console.error("Error deleting Group:", err);
+            alert("Something went wrong.");
+        }
+    }, [groupId]);
+
+    const handleRestoreGroup = useCallback(async () => {
+        if (!groupId) return;
+
+        try {
+            const res = await fetch(`/api/groups/restore?groupId=${groupId}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to RESTORE:", err.error);
+                alert("Failed to RESTORE.");
+                return;
+            }
+            fetchData()
+            const data = await res.json();
+
+        } catch (err) {
+            console.error("Error deleting Group:", err);
+            alert("Something went wrong.");
+        }
+    }, [groupId]);
+    const formatDate = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    };
     if (loading) return <div className="p-6"><InfoToast loading={true} message="Loading..." /></div>;
     if (!group) return <div className="p-6"><InfoToast loading={false} message="Group Not Found..." /></div>;
 
     return (
         <div>
             <br></br>
+            {showDeleteConfirm && (
+                <div
+                    className="absolute inset-0 z-50 flex items-center justify-center bg-black/65"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            Confirm Deletion
+                        </h3>
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to delete this group? This action will schedule the group for deletion in 24 hours.
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-xl mt-2">
                 <h1 className="text-2xl font-bold mb-4">Group Settings</h1>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -289,6 +373,23 @@ export default function GroupSettingsComponent() {
                         Save Changes
                     </button>
                 </form>
+                {group.delete_at ?
+                    <>
+                        <p className="mt-4 bg-red-100 p-2 border border-red-600 rounded text-red-600 font-semibold">This group will be deleted on {formatDate(group.delete_at)}</p><button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                handleRestoreGroup()
+                            }}
+                            className="mt-2 w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 cursor-pointer"
+                        >Restore Group</button> </> : <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowDeleteConfirm(true);
+                            }}
+                            className="mt-4 w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 cursor-pointer"
+                        >
+                        Delete Group
+                    </button>}
             </div>
         </div>
     );

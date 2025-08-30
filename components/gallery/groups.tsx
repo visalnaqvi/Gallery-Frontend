@@ -8,7 +8,7 @@ import { ImageItem } from "@/types/ImageItem";
 import GalleryGrid from "@/components/gallery/grid";
 import InfoToast from "@/components/infoToast";
 import Switch from "./switch";
-import { Info, Trash2, Download, X, HeartIcon } from "lucide-react";
+import { Info, Trash2, Download, X, HeartIcon, ArchiveRestore } from "lucide-react";
 
 type ApiResponse = {
     images: ImageItem[];
@@ -26,7 +26,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
-    const LOAD_MORE_AHEAD = 10;
+    const LOAD_MORE_AHEAD = 50;
     const [sorting, setSorting] = useState<string>("date_taken");
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
@@ -415,7 +415,26 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
             alert("Something went wrong.");
         }
     }, [currentImage, setImages]);
+    const handleRestoreGroup = useCallback(async () => {
+        if (!groupId) return;
 
+        try {
+            const res = await fetch(`/api/groups/images/restore?imageId=${currentImage.id}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to RESTORE:", err.error);
+                alert("Failed to RESTORE.");
+                return;
+            }
+            const data = await res.json();
+            alert("Image Resotred Successfully");
+        } catch (err) {
+            alert("Something went wrong.");
+        }
+    }, [groupId]);
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
@@ -521,17 +540,31 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                             <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                         </button>
                         {/* Delete Icon */}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowDeleteConfirm(true);
-                                resetHideTimer();
-                            }}
-                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
-                            title="Delete Image"
-                        >
-                            <Trash2 size={20} />
-                        </button>
+                        {currentImage && currentImage.delete_at ?
+
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRestoreGroup();
+                                    resetHideTimer();
+                                }}
+                                className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                                title="Restore Image"
+                            >
+                                <ArchiveRestore size={20} />
+                            </button>
+
+                            : <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowDeleteConfirm(true);
+                                    resetHideTimer();
+                                }}
+                                className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
+                                title="Delete Image"
+                            >
+                                <Trash2 size={20} />
+                            </button>}
                         {/* Download Compressed Icon */}
                         <button
                             onClick={(e) => {
@@ -616,7 +649,7 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
                                 <div>
                                     <span className="font-medium">Date Taken:</span>
                                     <br />
-                                    <span className="text-gray-300">{formatDate(currentImage.date_taken)}</span>
+                                    <span className="text-gray-300">{currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}</span>
                                 </div>
                                 <div>
                                     <span className="font-medium">Uploaded:</span>
