@@ -420,11 +420,11 @@ export default function Gallery({ isPublic }: { isPublic: boolean }) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
 
-    if (hotImages === 0 && images.length === 0 && !loading) {
-        return (
-            <InfoToast loading={false} message="No Images in this group" />
-        );
-    }
+    // if (hotImages === 0 && images.length === 0 && !loading) {
+    //     return (
+    //         <InfoToast loading={false} message="No Images in this group" />
+    //     );
+    // }
 
     if (!groupId) {
         return (
