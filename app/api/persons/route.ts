@@ -31,8 +31,10 @@ SELECT
     thumbnail,
     name
 FROM persons
-WHERE group_id = ${groupId} and quality_score >= 0.1 order by name;
-
+WHERE group_id = ${groupId}
+  AND quality_score >= 0.8
+ORDER BY name, cardinality(image_ids) DESC;
+;
     `;
     
     const result = await client.query(query);
@@ -40,7 +42,7 @@ WHERE group_id = ${groupId} and quality_score >= 0.1 order by name;
     client.release();
 
     if(result.rows.length == 0){
-          const queryP = `
+          const queryP = ` 
 SELECT count(*) as count from images WHERE group_id = ${groupId} and status != 'cooling';
 
     `;
