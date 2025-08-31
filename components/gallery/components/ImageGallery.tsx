@@ -424,7 +424,8 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                                     className="object-contain"
                                     priority={false}
                                     loading="eager"
-                                    unoptimized
+                                    sizes="100vw"
+
                                 />
                             </div>
                         )}

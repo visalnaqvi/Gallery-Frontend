@@ -108,7 +108,7 @@ const result = await client.query(
         imagesFromDB.map(async (img) => {
           let signedUrl = img.signed_url;
           let expireTime = img.expire_time ? new Date(img.expire_time) : null;
-
+          
           // if missing or expired, refresh immediately (await so response has URL)
           if (!signedUrl || !expireTime || expireTime < new Date()) {
             const refreshed = await refreshSignedUrl(img.id); 
