@@ -121,9 +121,9 @@ export async function GET(req: NextRequest) {
 
           return {
             id: img.id,
-            thumbnail_location: img.location ? img.location:`data:image/jpeg;base64,${Buffer.from(
+            thumbnail_location: img.location ? img.location:(img.thumb_byte ? `data:image/jpeg;base64,${Buffer.from(
               img.thumb_byte
-            ).toString("base64")}`,
+            ).toString("base64")}`:""),
             filename: img.filename,
             uploaded_at: img.uploaded_at,
             size: img.size,
