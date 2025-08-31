@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 
       // Fetch images using JOIN with faces table for pagination
       const result = await client.query(
-        `SELECT i.id, i.filename, i.thumb_byte, i.uploaded_at, i.size, i.date_taken, i.signed_url, i.expire_time
+        `SELECT i.id,i.location , i.filename, i.thumb_byte, i.uploaded_at, i.size, i.date_taken, i.signed_url, i.expire_time , i.highlight
          FROM images i
          INNER JOIN faces f ON i.id = f.image_id
          WHERE i.group_id = $1 AND f.person_id = $2
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
 
           return {
             id: img.id,
-            thumbnail_location: `data:image/jpeg;base64,${Buffer.from(
+            thumbnail_location: img.location ? img.location:`data:image/jpeg;base64,${Buffer.from(
               img.thumb_byte
             ).toString("base64")}`,
             filename: img.filename,
@@ -130,6 +130,7 @@ export async function GET(req: NextRequest) {
             date_taken: img.date_taken,
             compressed_location: signedUrl,
             expire_time: expireTime,
+            highlight:img.highlight
           };
         })
       );

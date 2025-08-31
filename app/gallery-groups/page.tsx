@@ -1,7 +1,7 @@
 'use client'
-import Gallery from "@/components/gallery/groups"
+import GalleryGroups from "@/components/gallery/groups"
 import { Suspense } from "react"
 
-export default function GroupsGallery() {
-    return <Suspense fallback={<div>Loading...</div>}><Gallery isPublic={false} /></Suspense>
+export default function GroupsGalleryPage() {
+    return <Suspense fallback={<div>Loading...</div>}><GalleryGroups isPublic={false} /></Suspense>
 }

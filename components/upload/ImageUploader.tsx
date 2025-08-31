@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, X, Play, Pause, RotateCcw, AlertCircle, CheckCircle, Clock, FileImage } from 'lucide-react';
 import { storage } from '@/lib/firebaseClient';
 import {
+    getDownloadURL,
     ref,
     uploadBytesResumable,
     UploadTask,
@@ -12,6 +13,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import { resizeImage } from './resize';
 
 interface ImageMeta {
     id: string;
@@ -31,6 +33,7 @@ interface QueueItem {
     error: string | null;
     uploadedAt: string | null;
     task: UploadTask | null;
+    location: string | null
 }
 
 interface UploadStats {
@@ -95,7 +98,8 @@ class UploadQueueManager {
             progress: 0,
             error: null,
             uploadedAt: null,
-            task: null
+            task: null,
+            location: null
         }));
 
         this.queue.push(...newItems);
@@ -155,14 +159,22 @@ class UploadQueueManager {
                         reject(error);
                     },
                     async () => {
-                        item.status = 'completed';
-                        item.uploadedAt = timestamp;
-                        item.progress = 100;
-                        this.stats.completed++;
-                        this.stats.uploadedSize += item.file.size;
+
 
                         // Save metadata to backend
                         try {
+                            item.status = 'completed';
+                            item.uploadedAt = timestamp;
+                            item.progress = 100;
+                            this.stats.completed++;
+                            this.stats.uploadedSize += item.file.size;
+                            // ===== Create & Upload Thumbnail =====
+                            const thumbBlob = await resizeImage(item.file, 150, 150);
+                            const thumbRef = ref(storage, `thumbnail_${uuid}`);
+                            const thumbSnap = await uploadBytesResumable(thumbRef, thumbBlob);
+                            const thumbURL = await getDownloadURL(thumbSnap.ref);
+
+                            item.location = thumbURL; // ✅ store thumbnail URL
                             await this.saveMetadata(item);
                         } catch (metaError) {
                             console.error('Failed to save metadata:', metaError);
@@ -184,7 +196,7 @@ class UploadQueueManager {
     private async saveMetadata(item: QueueItem): Promise<void> {
         const imageMeta: ImageMeta = {
             id: item.id,
-            location: null,
+            location: item.location,
             filename: item.file.name,
             size: item.file.size,
             uploaded_at: item.uploadedAt!,

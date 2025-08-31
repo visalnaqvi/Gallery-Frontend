@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       // fetch paginated images (excluding hot)
 const result = await client.query(
   `
-    SELECT id, filename, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status , highlight , delete_at 
+    SELECT id, filename,location, thumb_byte, uploaded_at, size, date_taken, signed_url, expire_time, status , highlight , delete_at 
     FROM images 
     WHERE group_id = $1 
       AND status != 'hot' 
@@ -126,7 +126,7 @@ const result = await client.query(
 
           return {
             id: img.id,
-            thumbnail_location: `data:image/jpeg;base64,${Buffer.from(
+            thumbnail_location: img.location ? img.location : `data:image/jpeg;base64,${Buffer.from(
               img.thumb_byte
             ).toString("base64")}`,
             filename: img.filename,
