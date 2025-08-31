@@ -168,13 +168,7 @@ class UploadQueueManager {
                             item.progress = 100;
                             this.stats.completed++;
                             this.stats.uploadedSize += item.file.size;
-                            // ===== Create & Upload Thumbnail =====
-                            const thumbBlob = await resizeImage(item.file, 150, 150);
-                            const thumbRef = ref(storage, `thumbnail_${uuid}`);
-                            const thumbSnap = await uploadBytesResumable(thumbRef, thumbBlob);
-                            const thumbURL = await getDownloadURL(thumbSnap.ref);
-
-                            item.location = thumbURL; // ✅ store thumbnail URL
+                            item.location = null; // ✅ store thumbnail URL
                             await this.saveMetadata(item);
                         } catch (metaError) {
                             console.error('Failed to save metadata:', metaError);
