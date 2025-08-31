@@ -111,14 +111,14 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
             setHotImages(data.hotImages);
 
             // Preload images
-            data.images.forEach((image) => preloadImage(image.compressed_location));
+            // data.images.forEach((image) => preloadImage(image.compressed_location));
         } catch (err) {
             console.error("Failed to fetch images", err);
         } finally {
             setLoading(false);
             cache.current.loadingStates.set(requestKey, false);
         }
-    }, [page, hasMore, loading, preloadImage, mode]);
+    }, [page, hasMore, loading, mode]);
 
     // ✅ Effect to handle groupId changes
     useEffect(() => {
