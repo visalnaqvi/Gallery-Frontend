@@ -46,7 +46,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
         if (isOpen && window.innerWidth < 768) {
             onClose();
         }
-    }, [pathname]);
+    }, [pathname, groupId]);
     // Auto-expand only current group and collapse others
     useEffect(() => {
         if (groupId) {
@@ -141,7 +141,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
 
     return (
         <aside
-            className={`bg-blue-600 text-white flex flex-col transition-all duration-300 fixed left-0 top-16 bottom-0 z-10 shadow-lg ${isOpen ? "w-72" : "w-0 overflow-hidden"
+            className={`bg-blue-600 text-white flex flex-col transition-all duration-300 fixed left-0 top-16 bottom-0 z-10 shadow-lg ${isOpen ? "w-full md:w-72" : "w-0 overflow-hidden"
                 }`}
         >
             {/* Close button */}

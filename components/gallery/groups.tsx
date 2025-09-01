@@ -315,6 +315,8 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                     isOpen={isOpen}
                     preloadImage={preloadImage}
                     preloadedRange={preloadedRange}
+                    mode={mode}
+                    resetState={resetState}
                 />
             }
         </>

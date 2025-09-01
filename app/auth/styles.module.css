@@ -59,6 +59,9 @@
 
     .formHolder{
         min-width: auto;
+        width: 85vw;
+                background-color: transparent;
+        box-shadow: none;
     }
 }
 

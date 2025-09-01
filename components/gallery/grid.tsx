@@ -27,21 +27,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
 
             {/* Sorting Dropdown */}
             <div className="flex justify-end items-center p-4">
-                <div className="flex justify-end items-center mr-2">
-                    <label htmlFor="sort" className="mr-2 text-sm font-medium text-gray-700">
-                        Sort:
-                    </label>
-                    <select
-                        id="sort"
-                        value={sorting}
-                        onChange={(e) => setSorting(e.target.value)}
-                        className="bg-blue-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option className="bg-white" value="date_taken">Date Taken</option>
-                        <option className="bg-white" value="filename">Name</option>
-                        <option className="bg-white" value="uploaded_at">Upload Date</option>
-                    </select>
-                </div>
+
 
                 {groupId && <div className="flex justify-end items-center">
                     <button
@@ -93,7 +79,25 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                     </button>
                 </div>}
 
-
+                <div className="flex flex-col items-start ml-2 bg-blue-100 rounded p-2  ">
+                    <label
+                        htmlFor="sort"
+                        className="text-xs font-medium text-gray-600 text-center ml-1"
+                    >
+                        Sort
+                    </label>
+                    <select
+                        id="sort"
+                        value={sorting}
+                        onChange={(e) => setSorting(e.target.value)}
+                        className="text-base font-semibold
+               focus:outline-none focus:ring-2 focus:ring-blue-500 text-blue-800 cursor-pointer"
+                    >
+                        <option className="bg-white text-sm font-normal" value="date_taken">Date Taken</option>
+                        <option className="bg-white text-sm font-normal" value="filename">Name</option>
+                        <option className="bg-white text-sm font-normal" value="uploaded_at">Upload Date</option>
+                    </select>
+                </div>
 
             </div>
             {/* Image Grid */}

@@ -83,7 +83,7 @@ export default function CreateGroupModal({
                     name: groupName,
                     userId,
                     profile_pic_bytes: profilePicBuffer, // send as array of numbers
-                    planType,
+                    planType: 'lite',
                     access,
                 }),
             });
@@ -131,7 +131,7 @@ export default function CreateGroupModal({
                 </div>
 
                 {/* Payment Plan */}
-                <div className="mb-4">
+                {/* <div className="mb-4">
                     <label className="block text-sm font-medium mb-1">Payment Plan</label>
                     <select
                         value={planType}
@@ -142,7 +142,7 @@ export default function CreateGroupModal({
                         <option value="pro">Pro</option>
                         <option value="elite">Elite</option>
                     </select>
-                </div>
+                </div> */}
 
                 {/* Access */}
                 <div className="mb-4">

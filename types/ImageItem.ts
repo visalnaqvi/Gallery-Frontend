@@ -7,5 +7,5 @@ export type ImageItem = {
 size:number;
 uploaded_at:string;    
 highlight:boolean;
-delete_at:string;
+delete_at:string | null;
 };

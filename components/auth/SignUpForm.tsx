@@ -6,7 +6,13 @@ import styles from "./styles.module.css";
 import InfoToast from '../infoToast';
 import { GridLoader } from 'react-spinners';
 
-export default function SignupForm() {
+
+type Props = {
+    setMode: (value: string | ((prev: string) => string)) => void;
+    setSignUpSuccess: (value: boolean | ((prev: boolean) => boolean)) => void;
+};
+
+export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
     const [form, setForm] = useState({
         first_name: '',
         last_name: '',
@@ -17,7 +23,7 @@ export default function SignupForm() {
     });
     const [showPass, setShowPass] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
-    const [signUpSuccess, setSignUpSuccess] = useState(false)
+
     const [loading, setLoading] = useState(false)
 
     function validate() {
@@ -49,6 +55,7 @@ export default function SignupForm() {
         });
 
         const data = await res.json();
+
         if (res.ok) {
             // redirect or reset form
             setForm({
@@ -61,6 +68,7 @@ export default function SignupForm() {
             });
             setErrors({});
             setSignUpSuccess(true)
+            setMode("login")
             setTimeout(() => {
                 setSignUpSuccess(false)
             }, 5000)
@@ -72,15 +80,10 @@ export default function SignupForm() {
 
     return (
         <form onSubmit={handleSignup} className={styles.form}>
-            {
-                signUpSuccess &&
-                <div className='fixed bottom-[50px] right-[50px]'
-                ><InfoToast loading={false} success={true} message='Signup successful login to continue' /></div>
 
-            }
             <h2 className={styles.heading}>Hello,</h2>
-            <h2 className={styles.heading}>Welcome to Snapsy</h2>
-            <p className={styles.tag}>Your new home for photos, stories, and memories.</p>
+            <h2 className={styles.heading}>Welcome to Snapper</h2>
+            {/* <p className={styles.tag}>Your new home for photos, stories, and memories.</p> */}
 
             {/* First Name */}
             <div className={styles.inputWrapper}>

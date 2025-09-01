@@ -400,6 +400,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                     isOpen={isOpen}
                     preloadImage={preloadImage}
                     preloadedRange={preloadedRange}
+                    resetState={resetState}
                 />
             }
         </>

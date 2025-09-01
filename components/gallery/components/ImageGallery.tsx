@@ -10,16 +10,18 @@ type props = {
     setImages: (value: ImageItem[] | ((prev: ImageItem[]) => ImageItem[])) => void;
     setIsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
     currentIndex: number;
-    fetchImages: () => void;
+    fetchImages: (currentPage?: number, resetImages?: boolean) => void;
     LOAD_MORE_AHEAD: number;
     hasMore: boolean;
     loading: boolean;
     isOpen: boolean;
     preloadImage: (src: string) => void
     preloadedRange: React.RefObject<{ min: number; max: number }>;
+    mode?: string;
+    resetState: () => void
 }
 
-export default function ImageGalleryComponent({ images, setCurrentIndex, currentIndex, fetchImages, LOAD_MORE_AHEAD, hasMore, loading, setIsOpen, setImages, isOpen, preloadImage, preloadedRange }: props) {
+export default function ImageGalleryComponent({ images, setCurrentIndex, currentIndex, fetchImages, LOAD_MORE_AHEAD, hasMore, loading, setIsOpen, setImages, isOpen, preloadImage, preloadedRange, mode, resetState }: props) {
     const [showIcons, setShowIcons] = useState(true);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [showImageInfo, setShowImageInfo] = useState(false);
@@ -222,33 +224,33 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
     }, [images, currentIndex]);
 
     // Download original image via backend proxy
-    const downloadOriginal = useCallback(async () => {
-        try {
-            const response = await fetch('/api/images/download', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    filename: images[currentIndex].id,
-                })
-            });
-            const { downloadUrl } = await response.json();
-            const fileResp = await fetch(downloadUrl);
-            const blob = await fileResp.blob();
-            const url = window.URL.createObjectURL(blob);
-            // Trigger download
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = images[currentIndex].filename || "image.jpg";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Download failed:', error);
-        }
-    }, [images, currentIndex]);
+    // const downloadOriginal = useCallback(async () => {
+    //     try {
+    //         const response = await fetch('/api/images/download', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json'
+    //             },
+    //             body: JSON.stringify({
+    //                 filename: images[currentIndex].id,
+    //             })
+    //         });
+    //         const { downloadUrl } = await response.json();
+    //         const fileResp = await fetch(downloadUrl);
+    //         const blob = await fileResp.blob();
+    //         const url = window.URL.createObjectURL(blob);
+    //         // Trigger download
+    //         const link = document.createElement('a');
+    //         link.href = url;
+    //         link.download = images[currentIndex].filename || "image.jpg";
+    //         document.body.appendChild(link);
+    //         link.click();
+    //         document.body.removeChild(link);
+    //         window.URL.revokeObjectURL(url);
+    //     } catch (error) {
+    //         console.error('Download failed:', error);
+    //     }
+    // }, [images, currentIndex]);
 
     const currentImage = images[currentIndex];
 
@@ -281,14 +283,36 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         : img
                 )
             );
+            console.log("mode is " + mode)
 
+            if (mode == 'highlight') {
+                // In highlight mode, removing highlight means the image will be filtered out
+                // So we need to navigate to next image or close carousel
+                if (currentImage.highlight) { // We're removing the highlight
+                    const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
+
+                    if (nextIndex >= 0 && images.length > 1) {
+                        // Navigate to next/previous image
+                        setCurrentIndex(nextIndex);
+                    } else {
+                        // No more images, close carousel
+                        setIsOpen(false);
+                    }
+                }
+
+                // Reset and fetch from beginning to refresh the filtered view
+                resetState();
+                setTimeout(() => {
+                    fetchImages(0, true);
+                }, 0);
+            }
         } catch (err) {
             console.error("Error updating highlight:", err);
             alert("Something went wrong.");
         }
-    }, [currentImage, setImages]);
+    }, [currentImage, setImages, mode, resetState, fetchImages, currentIndex, images.length, setCurrentIndex, setIsOpen]);
 
-    const handleRestoreGroup = useCallback(async () => {
+    const handleRestoreImage = useCallback(async () => {
         if (!currentImage) return;
 
         try {
@@ -303,11 +327,38 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 return;
             }
             const data = await res.json();
-            alert("Image Resotred Successfully");
+            setImages(prevImages =>
+                prevImages.map((img: ImageItem) =>
+                    img.id === currentImage.id
+                        ? { ...img, delete_at: null }
+                        : img
+                )
+            );
+            console.log("mode is " + mode)
+            if (mode == 'bin') {
+                // In bin mode, restoring means the image will be filtered out
+                // So we need to navigate to next image or close carousel
+                const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
+
+                if (nextIndex >= 0 && images.length > 1) {
+                    // Navigate to next/previous image
+                    setCurrentIndex(nextIndex);
+                } else {
+                    // No more images, close carousel
+                    setIsOpen(false);
+                }
+
+                // Reset and fetch from beginning to refresh the filtered view
+                resetState();
+                setTimeout(() => {
+                    fetchImages(0, true);
+                }, 0);
+            }
+            alert("Image Restored Successfully");
         } catch (err) {
             alert("Something went wrong.");
         }
-    }, [currentImage]);
+    }, [currentImage, setImages, mode, resetState, fetchImages, currentIndex, images.length, setCurrentIndex, setIsOpen]);
 
     const handleConfirmDelete = useCallback(async () => {
         if (!currentImage?.id) return;
@@ -326,13 +377,23 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
 
             const data = await res.json();
             console.log("Delete scheduled:", data);
+
+            // ✅ UPDATE LOCAL STATE - Add this part!
+            setImages(prevImages =>
+                prevImages.map((img: ImageItem) =>
+                    img.id === currentImage.id
+                        ? { ...img, delete_at: new Date().toISOString() } // Set delete_at to current time
+                        : img
+                )
+            );
+
             alert("Image will be deleted in 24 hours.");
             setShowDeleteConfirm(false);
         } catch (err) {
             console.error("Error deleting image:", err);
             alert("Something went wrong.");
         }
-    }, [currentImage]);
+    }, [currentImage, setImages]);
 
     // ✅ Custom render function for virtualized items
     const renderVirtualizedItem = useCallback((item: ReactImageGalleryItem) => {
@@ -438,10 +499,6 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 {currentIndex + 1} / {images.length}
             </div>
 
-            {/* Preload Debug Info (remove in production) */}
-            <div className={`absolute top-16 left-4 z-50 text-white bg-black bg-opacity-50 px-2 py-1 rounded text-xs transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'}`}>
-                Preloaded: {preloadedRange.current.min} - {preloadedRange.current.max} ({preloadedImagesRef.current.size} imgs)
-            </div>
 
             {/* Action Icons */}
             <div className={`absolute bottom-4 right-4 z-50 flex gap-3 transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
@@ -475,7 +532,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            handleRestoreGroup();
+                            handleRestoreImage();
                             resetHideTimer();
                         }}
                         className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
@@ -508,7 +565,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 </button>
 
                 {/* Download Original Icon */}
-                <button
+                {/* <button
                     onClick={(e) => {
                         e.stopPropagation();
                         downloadOriginal();
@@ -518,7 +575,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                     title="Download Original"
                 >
                     <Download size={20} />
-                </button>
+                </button> */}
             </div>
 
             {showDeleteConfirm && (

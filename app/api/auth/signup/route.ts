@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE!,
@@ -16,14 +15,27 @@ export async function POST(req: NextRequest) {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const client = await pool.connect();
+
+    // 🔍 Check if email already exists
+    const existing = await client.query(
+      `SELECT email FROM users WHERE email = $1`,
+      [email]
+    );
+
+    if (existing.rows.length > 0) {
+      client.release();
+      return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
+    }
+
+    // ✅ Insert new user
     await client.query(
       `INSERT INTO users (
-        first_name, last_name, password_hash, email, phone_number, date_of_birth, is_admin, groups, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, false, ARRAY[]::int[], NOW())`,
+        first_name, last_name, password_hash, email, phone_number, date_of_birth, is_admin, groups, created_at, plan_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, false, ARRAY[]::int[], NOW(), 'lite')`,
       [first_name, last_name, hashedPassword, email, phone_number, date_of_birth]
     );
+
     client.release();
 
     return NextResponse.json({ message: 'User created successfully' });
