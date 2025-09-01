@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ImageItem } from "@/types/ImageItem";
-import { Share2, Flame, ImageIcon, Trash } from "lucide-react";
+import { Share2, Heart, ImageIcon, Trash } from "lucide-react";
 import Switch from "./switch";
 import { useRouter } from "next/navigation";
 import InfoToast from "../infoToast";
@@ -72,7 +72,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         onClick={() => setMode("highlight")}
                         className={`flex justify-center items-center ${loading ? 'bg-blue-300' : 'bg-blue-500'} text-white px-4 py-2 rounded cursor-pointer hover:${loading ? 'bg-blue-300' : 'bg-blue-600'} transition`}
                     >
-                        <Flame size={16} className="md:mr-2 mb-1" />
+                        <Heart size={16} className="md:mr-2 mb-1" />
                         <span className="hidden md:block">
                             Highlights
                         </span>
