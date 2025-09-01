@@ -15,61 +15,100 @@ type props = {
     hasMore: boolean;
     loading: boolean;
     isOpen: boolean;
-    preloadImage: (src: string) => void
-    preloadedRange: React.RefObject<{ min: number; max: number }>;
     mode?: string;
     resetState: () => void
 }
 
-export default function ImageGalleryComponent({ images, setCurrentIndex, currentIndex, fetchImages, LOAD_MORE_AHEAD, hasMore, loading, setIsOpen, setImages, isOpen, preloadImage, preloadedRange, mode, resetState }: props) {
+export default function ImageGalleryComponent({
+    images,
+    setCurrentIndex,
+    currentIndex,
+    fetchImages,
+    LOAD_MORE_AHEAD,
+    hasMore,
+    loading,
+    setIsOpen,
+    setImages,
+    isOpen,
+    mode,
+    resetState
+}: props) {
     const [showIcons, setShowIcons] = useState(true);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    // ✅ Enhanced preloading system
-    const lastDirectionRef = useRef<'forward' | 'backward' | null>(null);
-    const lastIndexRef = useRef<number>(0);
+    // Simplified preloading system
     const preloadedImagesRef = useRef<Set<string>>(new Set());
-    const PRELOAD_BATCH_SIZE = 10; // How many images to preload in each batch
+    const preloadingRef = useRef<Set<string>>(new Set()); // Track images currently being preloaded
+    const PRELOAD_WINDOW = 15; // Number of images to keep preloaded around current
 
-    // ✅ SOLUTION: Create virtualized gallery items with buffer
-    const BUFFER_SIZE = 3; // Only render current + 3 before + 3 after
+    // Simple preload function
+    const preloadImage = useCallback((src: string): Promise<void> => {
+        if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
+            return Promise.resolve();
+        }
 
-    const virtualizedGalleryItems: ReactImageGalleryItem[] = useMemo(() => {
-        // Calculate the range of items to actually render
-        const startIndex = Math.max(0, currentIndex - BUFFER_SIZE);
-        const endIndex = Math.min(images.length - 1, currentIndex + BUFFER_SIZE);
+        preloadingRef.current.add(src);
 
-        // Create array with placeholders for all positions but only real items in buffer
-        return images.map((image, index) => {
-            if (index >= startIndex && index <= endIndex) {
-                // Render actual image within buffer
-                return {
-                    original: image.compressed_location,
-                    loading: "lazy" as const,
-                    originalAlt: "Gallery image",
-                    thumbnailAlt: "Gallery thumbnail",
-                    // Add custom property to identify if this is a real item
-                    renderIndex: index,
-                    isVirtualized: false
-                };
-            } else {
-                // Placeholder for out-of-buffer items
-                return {
-                    original: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMzMzMzMzMiLz48L3N2Zz4=", // 1x1 gray placeholder
-                    loading: "lazy" as const,
-                    originalAlt: "Loading...",
-                    thumbnailAlt: "Loading...",
-                    // Add custom property to identify if this is a placeholder
-                    renderIndex: index,
-                    isVirtualized: true
-                };
-            }
+        return new Promise((resolve, reject) => {
+            const img = new window.Image();
+            img.onload = () => {
+                preloadedImagesRef.current.add(src);
+                preloadingRef.current.delete(src);
+                resolve();
+            };
+            img.onerror = (error) => {
+                preloadingRef.current.delete(src);
+                console.warn(`Failed to preload image: ${src}`, error);
+                resolve(); // Don't reject to avoid breaking Promise.all
+            };
+            img.src = src;
         });
-    }, [images, currentIndex, BUFFER_SIZE]);
+    }, []);
 
-    // ✅ Auto-hide icons after 3 seconds
+    // Generate gallery items WITHOUT virtualization
+    const galleryItems: ReactImageGalleryItem[] = useMemo(() => {
+        return images.map((image, index) => ({
+            original: image.compressed_location,
+            loading: "lazy" as const,
+            originalAlt: `Gallery image ${index + 1}`,
+            thumbnailAlt: `Gallery thumbnail ${index + 1}`,
+        }));
+    }, [images]);
+
+    // Preload images around current index
+    const preloadAroundIndex = useCallback(async (index: number) => {
+        const start = Math.max(0, index - PRELOAD_WINDOW);
+        const end = Math.min(images.length - 1, index + PRELOAD_WINDOW);
+
+        const toPreload: string[] = [];
+
+        for (let i = start; i <= end; i++) {
+            const src = images[i]?.compressed_location;
+            if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
+                toPreload.push(src);
+            }
+        }
+
+        if (toPreload.length > 0) {
+            console.log(`Preloading ${toPreload.length} images around index ${index}`);
+
+            // Preload in smaller batches to avoid overwhelming the browser
+            const batchSize = 5;
+            for (let i = 0; i < toPreload.length; i += batchSize) {
+                const batch = toPreload.slice(i, i + batchSize);
+                await Promise.all(batch.map(src => preloadImage(src)));
+
+                // Small delay between batches to prevent blocking
+                if (i + batchSize < toPreload.length) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+            }
+        }
+    }, [images, preloadImage, PRELOAD_WINDOW]);
+
+    // Auto-hide icons after 3 seconds
     const resetHideTimer = useCallback(() => {
         if (hideTimerRef.current) {
             clearTimeout(hideTimerRef.current);
@@ -80,94 +119,12 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
         }, 3000);
     }, []);
 
-    // ✅ Handle mouse movement to show/hide icons
+    // Handle mouse movement to show/hide icons
     const handleMouseMove = useCallback(() => {
         resetHideTimer();
     }, [resetHideTimer]);
 
-    // ✅ Enhanced preload function that checks if already loaded
-    const preloadImageBatch = useCallback(async (startIndex: number, endIndex: number) => {
-        const validIndices = [];
-
-        // Only add indices that are valid and not already preloaded
-        for (let i = startIndex; i <= endIndex; i++) {
-            if (i >= 0 && i < images.length) {
-                const imageSrc = images[i].compressed_location;
-                if (!preloadedImagesRef.current.has(imageSrc)) {
-                    validIndices.push(i);
-                }
-            }
-        }
-
-        if (validIndices.length === 0) {
-            console.log(`🟡 Batch ${startIndex}-${endIndex}: All images already preloaded`);
-            return;
-        }
-
-        console.log(`🔄 Preloading batch ${startIndex}-${endIndex}: ${validIndices.length} new images`);
-
-        // Preload images in parallel
-        const preloadPromises = validIndices.map(async (i) => {
-            const imageSrc = images[i].compressed_location;
-            try {
-                await preloadImage(imageSrc);
-                preloadedImagesRef.current.add(imageSrc);
-                console.log(`✅ Preloaded image ${i}`);
-            } catch (error) {
-                console.warn(`❌ Failed to preload image ${i}:`, error);
-            }
-        });
-
-        await Promise.all(preloadPromises);
-        console.log(`✅ Completed batch ${startIndex}-${endIndex}`);
-    }, [images, preloadImage]);
-
-    // ✅ Smart directional preloading
-    const handleDirectionalPreload = useCallback(async (newIndex: number, direction: 'forward' | 'backward') => {
-        console.log(`🎯 Directional preload: ${direction} from index ${newIndex}`);
-
-        if (direction === 'forward') {
-            // Calculate next batch to preload
-            const currentMax = preloadedRange.current.max;
-            const nextBatchStart = Math.max(currentMax + 1, newIndex + 1);
-            const nextBatchEnd = nextBatchStart + PRELOAD_BATCH_SIZE - 1;
-
-            if (nextBatchStart < images.length) {
-                await preloadImageBatch(nextBatchStart, nextBatchEnd);
-
-                // Update preloaded range
-                preloadedRange.current.max = Math.min(images.length - 1, nextBatchEnd);
-                console.log(`📈 Updated max range to: ${preloadedRange.current.max}`);
-            }
-        } else if (direction === 'backward') {
-            // Calculate previous batch to preload
-            const currentMin = preloadedRange.current.min;
-            const prevBatchEnd = Math.min(currentMin - 1, newIndex - 1);
-            const prevBatchStart = prevBatchEnd - PRELOAD_BATCH_SIZE + 1;
-
-            if (prevBatchEnd >= 0) {
-                await preloadImageBatch(Math.max(0, prevBatchStart), prevBatchEnd);
-
-                // Update preloaded range
-                preloadedRange.current.min = Math.max(0, prevBatchStart);
-                console.log(`📉 Updated min range to: ${preloadedRange.current.min}`);
-            }
-        }
-    }, [images.length, preloadImageBatch, preloadedRange, PRELOAD_BATCH_SIZE]);
-
-    // ✅ Detect if we need to trigger directional preloading
-    const shouldTriggerPreload = useCallback((newIndex: number, direction: 'forward' | 'backward') => {
-        const { min, max } = preloadedRange.current;
-        const threshold = 10; // Trigger when user is 5 images away from the edge
-
-        if (direction === 'forward') {
-            return newIndex >= max - threshold;
-        } else {
-            return newIndex <= min + threshold;
-        }
-    }, []);
-
-    // ✅ Convert bytes to MB
+    // Convert bytes to MB
     const formatFileSize = (bytes: number): string => {
         const mb = bytes / (1024 * 1024);
         return `${mb.toFixed(2)} MB`;
@@ -183,6 +140,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
         });
     };
 
+    // Setup keyboard handlers and body overflow
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
@@ -190,11 +148,13 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 setShowImageInfo(false);
             }
         };
+
         if (isOpen) {
             document.addEventListener("keydown", handleEsc);
             document.body.style.overflow = "hidden";
-            resetHideTimer(); // Start auto-hide timer when carousel opens
+            resetHideTimer();
         }
+
         return () => {
             document.removeEventListener("keydown", handleEsc);
             document.body.style.overflow = "unset";
@@ -204,13 +164,50 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
         };
     }, [isOpen, resetHideTimer]);
 
+    // Enhanced slide handler with improved preloading
+    const handleSlide = useCallback(async (index: number) => {
+        console.log(`Sliding to index ${index}`);
+        setCurrentIndex(index);
+        setShowImageInfo(false);
+        resetHideTimer();
+
+        // Immediate preload of current image if not already loaded
+        const currentSrc = images[index]?.compressed_location;
+        if (currentSrc && !preloadedImagesRef.current.has(currentSrc)) {
+            await preloadImage(currentSrc);
+        }
+
+        // Preload surrounding images
+        preloadAroundIndex(index);
+
+        // Fetch more images if close to end
+        if (images.length - index <= LOAD_MORE_AHEAD && hasMore && !loading) {
+            console.log(`Fetching more images (${images.length - index} remaining)`);
+            fetchImages();
+        }
+    }, [images, setCurrentIndex, resetHideTimer, preloadImage, preloadAroundIndex,
+        LOAD_MORE_AHEAD, hasMore, loading, fetchImages]);
+
+    // Initial preloading when gallery opens
+    useEffect(() => {
+        if (isOpen && images.length > 0) {
+            console.log(`Gallery opened at index ${currentIndex}`);
+
+            // Clear any stale preload state
+            preloadingRef.current.clear();
+
+            // Start preloading around current index
+            preloadAroundIndex(currentIndex);
+        }
+    }, [isOpen, currentIndex, images.length, preloadAroundIndex]);
+
+    // Download functions
     const downloadCompressed = useCallback(async () => {
         try {
-            // Fetch the actual file as blob
             const fileResp = await fetch(images[currentIndex].compressed_location);
             const blob = await fileResp.blob();
             const url = window.URL.createObjectURL(blob);
-            // Trigger download
+
             const link = document.createElement('a');
             link.href = url;
             link.download = images[currentIndex].filename || "image.jpg";
@@ -223,44 +220,11 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
         }
     }, [images, currentIndex]);
 
-    // Download original image via backend proxy
-    // const downloadOriginal = useCallback(async () => {
-    //     try {
-    //         const response = await fetch('/api/images/download', {
-    //             method: 'POST',
-    //             headers: {
-    //                 'Content-Type': 'application/json'
-    //             },
-    //             body: JSON.stringify({
-    //                 filename: images[currentIndex].id,
-    //             })
-    //         });
-    //         const { downloadUrl } = await response.json();
-    //         const fileResp = await fetch(downloadUrl);
-    //         const blob = await fileResp.blob();
-    //         const url = window.URL.createObjectURL(blob);
-    //         // Trigger download
-    //         const link = document.createElement('a');
-    //         link.href = url;
-    //         link.download = images[currentIndex].filename || "image.jpg";
-    //         document.body.appendChild(link);
-    //         link.click();
-    //         document.body.removeChild(link);
-    //         window.URL.revokeObjectURL(url);
-    //     } catch (error) {
-    //         console.error('Download failed:', error);
-    //     }
-    // }, [images, currentIndex]);
-
-    const currentImage = images[currentIndex];
-
     const handleHighlightUpdate = useCallback(async () => {
         if (!currentImage?.id) return;
 
         try {
-            // Use the correct property name (highlight instead of hightlight)
             const action = currentImage.highlight ? "remove" : "add";
-
             const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
                 method: "PATCH",
             });
@@ -275,7 +239,6 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
             const data = await res.json();
             console.log("Highlight updated:", data);
 
-            // Update local state to reflect the change
             setImages(prevImages =>
                 prevImages.map((img: ImageItem) =>
                     img.id === currentImage.id
@@ -283,24 +246,16 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         : img
                 )
             );
-            console.log("mode is " + mode)
 
-            if (mode == 'highlight') {
-                // In highlight mode, removing highlight means the image will be filtered out
-                // So we need to navigate to next image or close carousel
-                if (currentImage.highlight) { // We're removing the highlight
-                    const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
+            if (mode == 'highlight' && currentImage.highlight) {
+                const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
 
-                    if (nextIndex >= 0 && images.length > 1) {
-                        // Navigate to next/previous image
-                        setCurrentIndex(nextIndex);
-                    } else {
-                        // No more images, close carousel
-                        setIsOpen(false);
-                    }
+                if (nextIndex >= 0 && images.length > 1) {
+                    setCurrentIndex(nextIndex);
+                } else {
+                    setIsOpen(false);
                 }
 
-                // Reset and fetch from beginning to refresh the filtered view
                 resetState();
                 setTimeout(() => {
                     fetchImages(0, true);
@@ -310,7 +265,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
             console.error("Error updating highlight:", err);
             alert("Something went wrong.");
         }
-    }, [currentImage, setImages, mode, resetState, fetchImages, currentIndex, images.length, setCurrentIndex, setIsOpen]);
+    }, [currentIndex, images, setImages, mode, resetState, fetchImages, setCurrentIndex, setIsOpen]);
 
     const handleRestoreImage = useCallback(async () => {
         if (!currentImage) return;
@@ -326,7 +281,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 alert("Failed to RESTORE.");
                 return;
             }
-            const data = await res.json();
+
             setImages(prevImages =>
                 prevImages.map((img: ImageItem) =>
                     img.id === currentImage.id
@@ -334,21 +289,16 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         : img
                 )
             );
-            console.log("mode is " + mode)
+
             if (mode == 'bin') {
-                // In bin mode, restoring means the image will be filtered out
-                // So we need to navigate to next image or close carousel
                 const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
 
                 if (nextIndex >= 0 && images.length > 1) {
-                    // Navigate to next/previous image
                     setCurrentIndex(nextIndex);
                 } else {
-                    // No more images, close carousel
                     setIsOpen(false);
                 }
 
-                // Reset and fetch from beginning to refresh the filtered view
                 resetState();
                 setTimeout(() => {
                     fetchImages(0, true);
@@ -358,7 +308,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
         } catch (err) {
             alert("Something went wrong.");
         }
-    }, [currentImage, setImages, mode, resetState, fetchImages, currentIndex, images.length, setCurrentIndex, setIsOpen]);
+    }, [currentIndex, images, setImages, mode, resetState, fetchImages, setCurrentIndex, setIsOpen]);
 
     const handleConfirmDelete = useCallback(async () => {
         if (!currentImage?.id) return;
@@ -375,109 +325,25 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 return;
             }
 
-            const data = await res.json();
-            console.log("Delete scheduled:", data);
-
-            // ✅ UPDATE LOCAL STATE - Add this part!
             setImages(prevImages =>
                 prevImages.map((img: ImageItem) =>
                     img.id === currentImage.id
-                        ? { ...img, delete_at: new Date().toISOString() } // Set delete_at to current time
+                        ? { ...img, delete_at: new Date().toISOString() }
                         : img
                 )
             );
 
             alert("Image will be deleted in 24 hours.");
             setShowDeleteConfirm(false);
-        } catch (err) {
-            console.error("Error deleting image:", err);
+        } catch (error) {
+            console.error("Error deleting image:", error);
             alert("Something went wrong.");
         }
-    }, [currentImage, setImages]);
+    }, [currentIndex, images, setImages]);
 
-    // ✅ Custom render function for virtualized items
-    const renderVirtualizedItem = useCallback((item: ReactImageGalleryItem) => {
-        // Use custom property to determine if this is a placeholder
-        const isVirtualized = (item as any).isVirtualized;
-        const itemIndex = (item as any).renderIndex;
+    const currentImage = images[currentIndex];
 
-        if (isVirtualized) {
-            // Show loading placeholder for out-of-buffer items
-            return (
-                <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center bg-gray-900">
-                    <div className="text-white text-lg">Loading...</div>
-                </div>
-            );
-        }
-
-        return (
-            <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center">
-                <Image
-                    src={item.original}
-                    alt={item.originalAlt || ""}
-                    fill
-                    className="object-contain"
-                    priority={itemIndex === currentIndex} // Only prioritize current image
-                    sizes="110vw"
-                />
-            </div>
-        );
-    }, [currentIndex]);
-
-    // ✅ Enhanced slide handler with smart directional preloading
-    const handleSlide = useCallback(
-        async (index: number) => {
-            console.log(`🎯 Sliding from ${currentIndex} to ${index}`);
-
-            setCurrentIndex(index);
-            setShowImageInfo(false);
-            resetHideTimer();
-
-            // Determine direction
-            const direction = index > lastIndexRef.current ? 'forward' : 'backward';
-            const directionChanged = lastDirectionRef.current !== null && lastDirectionRef.current !== direction;
-
-            console.log(`📍 Direction: ${direction}${directionChanged ? ' (changed)' : ''}`);
-
-            // Check if we should trigger preloading
-            if (shouldTriggerPreload(index, direction)) {
-                console.log(`🚀 Triggering ${direction} preload at index ${index}`);
-                await handleDirectionalPreload(index, direction);
-            }
-
-            // Update refs
-            lastDirectionRef.current = direction;
-            lastIndexRef.current = index;
-
-            // Fetch more images if close to end
-            if (images.length - index <= LOAD_MORE_AHEAD && hasMore && !loading) {
-                console.log(`📡 Fetching more images (${images.length - index} remaining)`);
-                fetchImages();
-            }
-        },
-        [currentIndex, shouldTriggerPreload, handleDirectionalPreload, resetHideTimer, images.length, LOAD_MORE_AHEAD, hasMore, loading, fetchImages]
-    );
-
-    // ✅ Initialize preloaded images tracking when component mounts
-    useEffect(() => {
-        if (isOpen) {
-            // Reset tracking when gallery opens
-            lastIndexRef.current = currentIndex;
-            lastDirectionRef.current = null;
-
-            // Mark initially preloaded images
-            const currentRange = preloadedRange.current;
-            for (let i = currentRange.min; i <= currentRange.max; i++) {
-                if (i >= 0 && i < images.length) {
-                    preloadedImagesRef.current.add(images[i].compressed_location);
-                }
-            }
-
-            console.log(`🎬 Gallery opened at index ${currentIndex}, preloaded range: ${currentRange.min}-${currentRange.max}`);
-        }
-    }, [isOpen, currentIndex, images, preloadedRange]);
-
-    return <>
+    return (
         <div
             className="fixed inset-0 bg-black z-50"
             onMouseMove={handleMouseMove}
@@ -499,7 +365,6 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 {currentIndex + 1} / {images.length}
             </div>
 
-
             {/* Action Icons */}
             <div className={`absolute bottom-4 right-4 z-50 flex gap-3 transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
                 }`}>
@@ -515,6 +380,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 >
                     <Info size={20} />
                 </button>
+
                 {/* Heart icon */}
                 <button
                     onClick={(e) => {
@@ -523,12 +389,13 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
-                    title="Image Info"
+                    title="Toggle Highlight"
                 >
                     <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                 </button>
-                {/* Delete Icon */}
-                {currentImage && currentImage.delete_at ?
+
+                {/* Delete/Restore Icon */}
+                {currentImage && currentImage.delete_at ? (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -540,7 +407,8 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                     >
                         <ArchiveRestore size={20} />
                     </button>
-                    : <button
+                ) : (
+                    <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setShowDeleteConfirm(true);
@@ -550,8 +418,10 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         title="Delete Image"
                     >
                         <Trash2 size={20} />
-                    </button>}
-                {/* Download Compressed Icon */}
+                    </button>
+                )}
+
+                {/* Download Icon */}
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -563,21 +433,9 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 >
                     <Download size={20} />
                 </button>
-
-                {/* Download Original Icon */}
-                {/* <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        downloadOriginal();
-                        resetHideTimer();
-                    }}
-                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
-                    title="Download Original"
-                >
-                    <Download size={20} />
-                </button> */}
             </div>
 
+            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div
                     className="absolute inset-0 z-50 flex items-center justify-center bg-black/65"
@@ -608,6 +466,7 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 </div>
             )}
 
+            {/* Image Info Panel */}
             {showImageInfo && currentImage && (
                 <div
                     className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-80 text-white p-4 rounded-lg max-w-sm"
@@ -636,7 +495,9 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                         <div>
                             <span className="font-medium">Date Taken:</span>
                             <br />
-                            <span className="text-gray-300">{currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}</span>
+                            <span className="text-gray-300">
+                                {currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}
+                            </span>
                         </div>
                         <div>
                             <span className="font-medium">Uploaded:</span>
@@ -647,24 +508,28 @@ export default function ImageGalleryComponent({ images, setCurrentIndex, current
                 </div>
             )}
 
+            {/* Image Gallery */}
             <div className="h-full flex flex-col">
                 <div className="flex-1 relative">
                     <ImageGallery
-                        items={virtualizedGalleryItems}
+                        items={galleryItems}
                         startIndex={currentIndex}
                         showThumbnails={false}
                         showFullscreenButton={false}
                         showPlayButton={false}
                         showBullets={false}
-                        lazyLoad={true} // ✅ Enable lazy loading
+                        lazyLoad={false} // Disabled since we're handling preloading manually
                         showNav={true}
-                        slideDuration={100}
+                        slideDuration={150}
                         slideInterval={0}
-                        onSlide={(index: number) => { handleSlide(index) }}
-                        renderItem={renderVirtualizedItem}
+                        onSlide={handleSlide}
+                        slideOnThumbnailOver={false}
+                        disableKeyDown={false}
+                        disableSwipe={false}
+                        useBrowserFullscreen={false}
                     />
                 </div>
             </div>
         </div>
-    </>
+    );
 }

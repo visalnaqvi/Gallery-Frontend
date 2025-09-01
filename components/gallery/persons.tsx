@@ -34,56 +34,54 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState("");
-    const loadedImagesRef = useRef<Set<string>>(new Set());
     const [sorting, setSorting] = useState<string>("date_taken");
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
-    const LOAD_MORE_AHEAD = 50;
+    const LOAD_MORE_AHEAD = 10;
     const loaderRef = useRef<HTMLDivElement | null>(null);
-    const preloadedRange = useRef<{ min: number; max: number }>({ min: -1, max: -1 });
-    // Add ref to track current groupId and personId to prevent stale closures
+
+    // Add refs to track current values to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentPersonIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
 
+    // Simplified preloading system (matching the updated ImageGalleryComponent)
+    const preloadedImagesRef = useRef<Set<string>>(new Set());
+    const preloadingRef = useRef<Set<string>>(new Set());
 
-    // ✅ Use refs for cache + preloaded images (no re-render)
-    const cache = useRef<{
-        pages: Map<string, string[]>;
-        allImages: Map<string, string[]>;
-        loadingStates: Map<string, boolean>;
-    }>({
-        pages: new Map(),
-        allImages: new Map(),
-        loadingStates: new Map(),
-    });
+    // Simple preload function
+    const preloadImage = useCallback((src: string): Promise<void> => {
+        if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
+            return Promise.resolve();
+        }
 
-    // ✅ Preload images
-    const preloadImage = useCallback((src: string) => {
-        if (loadedImagesRef.current.has(src)) return Promise.resolve();
-        return new Promise<void>((resolve, reject) => {
+        preloadingRef.current.add(src);
+
+        return new Promise((resolve) => {
             const img = new window.Image();
             img.onload = () => {
-                loadedImagesRef.current.add(src);
+                preloadedImagesRef.current.add(src);
+                preloadingRef.current.delete(src);
                 resolve();
             };
-            img.onerror = reject;
+            img.onerror = () => {
+                preloadingRef.current.delete(src);
+                resolve(); // Don't reject to avoid breaking Promise.all
+            };
             img.src = src;
         });
     }, []);
 
-    // ✅ Reset state function
+    // Reset state function
     const resetState = useCallback(() => {
         setImages([]);
         setPage(0);
         setHasMore(true);
         setLoading(false);
-        loadedImagesRef.current.clear();
-        cache.current.pages.clear();
-        cache.current.allImages.clear();
-        cache.current.loadingStates.clear();
+        preloadedImagesRef.current.clear();
+        preloadingRef.current.clear();
     }, []);
 
-    // ✅ Fetch images with pagination (similar to GalleryGroups)
+    // Fetch images with pagination
     const fetchImages = useCallback(async (currentPage?: number, resetImages?: boolean) => {
         const actualGroupId = currentGroupIdRef.current;
         const actualPersonId = currentPersonIdRef.current;
@@ -121,16 +119,14 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
             setHasMore(data.hasMore);
             setPage(actualPage + 1);
 
-            // Preload images
-            data.images.forEach((image) => preloadImage(image.compressed_location));
         } catch (err) {
             console.error("Failed to fetch images", err);
         } finally {
             setLoading(false);
         }
-    }, [page, hasMore, loading, preloadImage]);
+    }, [page, hasMore, loading]);
 
-    // ✅ Fetch person details
+    // Fetch person details
     const fetchPersonDetails = useCallback(async () => {
         if (!personId) return;
 
@@ -144,7 +140,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
         }
     }, [personId]);
 
-    // ✅ Effect to handle groupId/personId changes
+    // Effect to handle groupId/personId changes
     useEffect(() => {
         if (!groupId || !personId) return;
 
@@ -160,9 +156,9 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                 fetchImages(0, true);
             }, 0);
         }
-    }, [groupId, personId, resetState, fetchPersonDetails]);
+    }, [groupId, personId, resetState, fetchPersonDetails, fetchImages]);
 
-    // ✅ Effect to handle sorting changes
+    // Effect to handle sorting changes
     useEffect(() => {
         if (!groupId || !personId) return;
 
@@ -176,10 +172,12 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                 fetchImages(0, true);
             }, 0);
         }
-    }, [sorting, groupId, personId, resetState]);
+    }, [sorting, groupId, personId, resetState, fetchImages]);
 
-    // ✅ Infinite scroll observer - same as GalleryGroups
+    // Infinite scroll observer
     useEffect(() => {
+        if (isOpen) return; // don't observe if carousel is open
+
         let timeoutId: NodeJS.Timeout;
         const observer = new IntersectionObserver(
             (entries) => {
@@ -192,64 +190,58 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
         );
 
         if (loaderRef.current) observer.observe(loaderRef.current);
+
         return () => {
             clearTimeout(timeoutId);
             if (loaderRef.current) observer.unobserve(loaderRef.current);
             observer.disconnect();
         };
-    }, [fetchImages, loading, hasMore, images.length]);
+    }, [fetchImages, loading, hasMore, images.length, isOpen]);
 
+    // Enhanced click handler with improved preloading (matching main gallery)
+    const handleImageClick = useCallback(async (idx: number) => {
+        console.log("Image clicked, opening gallery at index:", idx);
+        setCurrentIndex(idx);
+        setIsOpen(true);
 
+        // Preload current image immediately
+        const currentSrc = images[idx]?.compressed_location;
+        if (currentSrc) {
+            await preloadImage(currentSrc);
+        }
 
-    // ✅ Open carousel with preloading and infinite scroll trigger
-    const handleImageClick = useCallback(
+        // Preload surrounding images in background
+        const INITIAL_PRELOAD_RANGE = 10;
+        const start = Math.max(0, idx - INITIAL_PRELOAD_RANGE);
+        const end = Math.min(images.length - 1, idx + INITIAL_PRELOAD_RANGE);
 
-        async (idx: number) => {
-            console.log("clicked")
-            setCurrentIndex(idx);
-            setIsOpen(true);
-            console.log("preloading")
-            // 🔹 1. Load clicked image first
-            await preloadImage(images[idx].compressed_location);
-
-            // 🔹 2. Define batches (tiered order)
-            const batches: number[][] = [
-                Array.from({ length: 5 }, (_, i) => idx + i + 1),   // next 5
-                Array.from({ length: 5 }, (_, i) => idx + i + 6),   // next 5 after that
-                Array.from({ length: 5 }, (_, i) => idx - i - 1),   // previous 5
-                Array.from({ length: 5 }, (_, i) => idx - i - 6),   // previous 5 before that
-            ].map(batch => batch.filter(i => i >= 0 && i < images.length));
-
-            // 🔹 3. Preload sequentially (parallel inside each batch)
-            for (const batch of batches) {
-                await Promise.all(
-                    batch.map(i => preloadImage(images[i].compressed_location))
-                );
+        const imagesToPreload = [];
+        for (let i = start; i <= end; i++) {
+            if (i !== idx) { // Skip current image as it's already preloaded
+                const src = images[i]?.compressed_location;
+                if (src && !preloadedImagesRef.current.has(src)) {
+                    imagesToPreload.push(src);
+                }
             }
+        }
 
-            // 🔹 4. Update preloadedRange ref
-            preloadedRange.current = {
-                min: Math.max(
-                    0,
-                    Math.min(preloadedRange.current.min, idx - 10, idx) // clamp at 0
-                ),
-                max: Math.min(
-                    images.length - 1,
-                    Math.max(preloadedRange.current.max, idx + 10, idx) // clamp at last index
-                ),
-            };
+        // Preload in batches to avoid overwhelming the browser
+        const batchSize = 3;
+        for (let i = 0; i < imagesToPreload.length; i += batchSize) {
+            const batch = imagesToPreload.slice(i, i + batchSize);
+            Promise.all(batch.map(src => preloadImage(src)));
 
-            // 🔹 5. Fetch more if near end
-            if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
-
-                console.log("fetching mroe")
-                fetchImages();
+            // Small delay between batches
+            if (i + batchSize < imagesToPreload.length) {
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
-        },
-        [images, hasMore, loading, preloadImage, fetchImages, setCurrentIndex, setIsOpen, preloadedRange, LOAD_MORE_AHEAD]
-    );
+        }
 
-
+        // Fetch more if close to end
+        if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
+            fetchImages();
+        }
+    }, [images, hasMore, loading, preloadImage, fetchImages, LOAD_MORE_AHEAD]);
 
     const handleSaveName = async () => {
         if (!personId) return;
@@ -274,7 +266,10 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     if (!groupId) {
         return <InfoToast loading={false} message="No groupId provided in URL" />;
     }
-    if (!personId) { return <InfoToast loading={false} message="No personId provided in URL" /> };
+    if (!personId) {
+        return <InfoToast loading={false} message="No personId provided in URL" />;
+    }
+
     return (
         <>
             {/* Person Details Header */}
@@ -369,10 +364,12 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                 loading={loading}
             />
 
+            {/* Loading indicator */}
             {loading && (
                 <InfoToast loading={true} message="Loading Images" />
             )}
 
+            {/* End of images indicator */}
             {!hasMore && images.length > 0 && (
                 <p className="text-center py-4 text-gray-500">No more images to load</p>
             )}
@@ -386,7 +383,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
             )}
 
             {/* Fullscreen carousel */}
-            {isOpen &&
+            {isOpen && (
                 <ImageGalleryComponent
                     images={images}
                     setCurrentIndex={setCurrentIndex}
@@ -398,11 +395,10 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                     hasMore={hasMore}
                     loading={loading}
                     isOpen={isOpen}
-                    preloadImage={preloadImage}
-                    preloadedRange={preloadedRange}
+                    mode={"person"} // Set mode to "person" instead of empty string
                     resetState={resetState}
                 />
-            }
+            )}
         </>
     );
 }
