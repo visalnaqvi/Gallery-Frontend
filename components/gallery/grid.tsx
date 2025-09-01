@@ -114,6 +114,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                                 fill
                                 className="object-cover object-top hover:scale-105 transition-transform duration-300"
                                 priority={idx < 12}
+                                unoptimized
                             />
                         </div>
                     ))}

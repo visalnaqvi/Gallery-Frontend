@@ -22,7 +22,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
-    const LOAD_MORE_AHEAD = 50;
+    const LOAD_MORE_AHEAD = 10;
     const [sorting, setSorting] = useState<string>("date_taken");
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
@@ -31,7 +31,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     const currentGroupIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
     const [mode, setMode] = useState("gallery")
-
+    const preloadedRange = useRef<{ min: number; max: number }>({ min: -1, max: -1 });
 
     // ✅ Use refs for cache + preloaded images (no re-render)
     const loadedImagesRef = useRef<Set<string>>(new Set());
@@ -170,6 +170,8 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
 
     // ✅ Infinite scroll observer - separate from main fetch logic
     useEffect(() => {
+        if (isOpen) return; // 👈 don't observe if carousel is open
+
         let timeoutId: NodeJS.Timeout;
         const observer = new IntersectionObserver(
             (entries) => {
@@ -187,30 +189,57 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
             if (loaderRef.current) observer.unobserve(loaderRef.current);
             observer.disconnect();
         };
-    }, [fetchImages, loading, hasMore, images.length]);
+    }, [fetchImages, loading, hasMore, images.length, isOpen]); // 👈 depend on isOpen
 
     // ✅ Close on Esc and setup auto-hide
 
 
     // ✅ Click handler to open carousel
     const handleImageClick = useCallback(
-        (idx: number) => {
+
+        async (idx: number) => {
+            console.log("clicked")
             setCurrentIndex(idx);
             setIsOpen(true);
-            const indicesToPreload = [
-                idx - 10, idx - 9, idx - 8, idx - 7, idx - 6,
-                idx - 5, idx - 4, idx - 3, idx - 2, idx - 1,
-                idx, idx + 1, idx + 2, idx + 3, idx + 4,
-                idx + 5, idx + 6, idx + 7, idx + 8, idx + 9, idx + 10
-            ].filter((i) => i >= 0 && i < images.length);
+            console.log("preloading")
+            // 🔹 1. Load clicked image first
+            await preloadImage(images[idx].compressed_location);
 
-            indicesToPreload.forEach((i) => preloadImage(images[i].compressed_location));
+            // 🔹 2. Define batches (tiered order)
+            const batches: number[][] = [
+                Array.from({ length: 5 }, (_, i) => idx + i + 1),   // next 5
+                Array.from({ length: 5 }, (_, i) => idx + i + 6),   // next 5 after that
+                Array.from({ length: 5 }, (_, i) => idx - i - 1),   // previous 5
+                Array.from({ length: 5 }, (_, i) => idx - i - 6),   // previous 5 before that
+            ].map(batch => batch.filter(i => i >= 0 && i < images.length));
 
+            // 🔹 3. Preload sequentially (parallel inside each batch)
+            for (const batch of batches) {
+                await Promise.all(
+                    batch.map(i => preloadImage(images[i].compressed_location))
+                );
+            }
+
+            // 🔹 4. Update preloadedRange ref
+            preloadedRange.current = {
+                min: Math.max(
+                    0,
+                    Math.min(preloadedRange.current.min, idx - 10, idx) // clamp at 0
+                ),
+                max: Math.min(
+                    images.length - 1,
+                    Math.max(preloadedRange.current.max, idx + 10, idx) // clamp at last index
+                ),
+            };
+
+            // 🔹 5. Fetch more if near end
             if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
+
+                console.log("fetching mroe")
                 fetchImages();
             }
         },
-        [images, hasMore, loading, preloadImage, fetchImages]
+        [images, hasMore, loading, preloadImage, fetchImages, setCurrentIndex, setIsOpen, preloadedRange, LOAD_MORE_AHEAD]
     );
 
 
@@ -285,6 +314,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                     loading={loading}
                     isOpen={isOpen}
                     preloadImage={preloadImage}
+                    preloadedRange={preloadedRange}
                 />
             }
         </>

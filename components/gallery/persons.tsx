@@ -39,6 +39,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
     const LOAD_MORE_AHEAD = 50;
     const loaderRef = useRef<HTMLDivElement | null>(null);
+    const preloadedRange = useRef<{ min: number; max: number }>({ min: -1, max: -1 });
     // Add ref to track current groupId and personId to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentPersonIdRef = useRef<string | null>(null);
@@ -59,7 +60,6 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     // ✅ Preload images
     const preloadImage = useCallback((src: string) => {
         if (loadedImagesRef.current.has(src)) return Promise.resolve();
-
         return new Promise<void>((resolve, reject) => {
             const img = new window.Image();
             img.onload = () => {
@@ -203,27 +203,52 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
 
     // ✅ Open carousel with preloading and infinite scroll trigger
     const handleImageClick = useCallback(
-        (idx: number) => {
+
+        async (idx: number) => {
+            console.log("clicked")
             setCurrentIndex(idx);
             setIsOpen(true);
+            console.log("preloading")
+            // 🔹 1. Load clicked image first
+            await preloadImage(images[idx].compressed_location);
 
-            // Preload surrounding images
-            const indicesToPreload = [
-                idx - 10, idx - 9, idx - 8, idx - 7, idx - 6,
-                idx - 5, idx - 4, idx - 3, idx - 2, idx - 1,
-                idx, idx + 1, idx + 2, idx + 3, idx + 4,
-                idx + 5, idx + 6, idx + 7, idx + 8, idx + 9, idx + 10
-            ].filter((i) => i >= 0 && i < images.length);
+            // 🔹 2. Define batches (tiered order)
+            const batches: number[][] = [
+                Array.from({ length: 5 }, (_, i) => idx + i + 1),   // next 5
+                Array.from({ length: 5 }, (_, i) => idx + i + 6),   // next 5 after that
+                Array.from({ length: 5 }, (_, i) => idx - i - 1),   // previous 5
+                Array.from({ length: 5 }, (_, i) => idx - i - 6),   // previous 5 before that
+            ].map(batch => batch.filter(i => i >= 0 && i < images.length));
 
-            indicesToPreload.forEach((i) => preloadImage(images[i].compressed_location));
+            // 🔹 3. Preload sequentially (parallel inside each batch)
+            for (const batch of batches) {
+                await Promise.all(
+                    batch.map(i => preloadImage(images[i].compressed_location))
+                );
+            }
 
-            // Load more if approaching end
+            // 🔹 4. Update preloadedRange ref
+            preloadedRange.current = {
+                min: Math.max(
+                    0,
+                    Math.min(preloadedRange.current.min, idx - 10, idx) // clamp at 0
+                ),
+                max: Math.min(
+                    images.length - 1,
+                    Math.max(preloadedRange.current.max, idx + 10, idx) // clamp at last index
+                ),
+            };
+
+            // 🔹 5. Fetch more if near end
             if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
+
+                console.log("fetching mroe")
                 fetchImages();
             }
         },
-        [images, hasMore, loading, preloadImage, fetchImages]
+        [images, hasMore, loading, preloadImage, fetchImages, setCurrentIndex, setIsOpen, preloadedRange, LOAD_MORE_AHEAD]
     );
+
 
 
     const handleSaveName = async () => {
@@ -374,6 +399,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                     loading={loading}
                     isOpen={isOpen}
                     preloadImage={preloadImage}
+                    preloadedRange={preloadedRange}
                 />
             }
         </>

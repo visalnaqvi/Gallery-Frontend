@@ -1,58 +1,60 @@
-"use client";
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import Image from "next/image";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
-import { Info, Trash2, Download, X, HeartIcon, ArchiveRestore } from "lucide-react";
-import { ImageItem } from "./types";
+import { ImageItem } from "@/types/ImageItem";
+import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X } from "lucide-react";
 
-interface ImageCarouselProps {
-    isOpen: boolean;
-    images: ImageItem[];
+
+type props = {
+    images: ImageItem[]
+    setCurrentIndex: (value: number | ((prev: number) => number)) => void;
+    setImages: (value: ImageItem[] | ((prev: ImageItem[]) => ImageItem[])) => void;
+    setIsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
     currentIndex: number;
+    fetchImages: () => void;
+    LOAD_MORE_AHEAD: number;
     hasMore: boolean;
     loading: boolean;
-    showIcons: boolean;
-    showImageInfo: boolean;
-    showDeleteConfirm: boolean;
-    onClose: () => void;
-    onSlide: (index: number) => void;
-    onLoadMore: () => void;
-    onMouseMove: () => void;
-    onToggleInfo: () => void;
-    onToggleDeleteConfirm: (show: boolean) => void;
-    onHighlightUpdate: (imageId: string) => void;
-    onDeleteImage: (imageId: string) => void;
-    onRestoreImage: (imageId: string) => void;
-    resetHideTimer: () => void;
+    isOpen: boolean;
+    preloadImage: (src: string) => void
+    preloadedRange: React.RefObject<{ min: number; max: number }>;
 }
+export default function ImageGalleryComponent({ images, setCurrentIndex, currentIndex, fetchImages, LOAD_MORE_AHEAD, hasMore, loading, setIsOpen, setImages, isOpen, preloadImage, preloadedRange }: props) {
+    const [showIcons, setShowIcons] = useState(true);
+    const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [showImageInfo, setShowImageInfo] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const cache = useRef<{
+        pages: Map<string, string[]>;
+        allImages: Map<string, string[]>;
+        loadingStates: Map<string, boolean>;
+    }>({
+        pages: new Map(),
+        allImages: new Map(),
+        loadingStates: new Map(),
+    });
 
-export default function ImageCarousel({
-    isOpen,
-    images,
-    currentIndex,
-    hasMore,
-    loading,
-    showIcons,
-    showImageInfo,
-    showDeleteConfirm,
-    onClose,
-    onSlide,
-    onLoadMore,
-    onMouseMove,
-    onToggleInfo,
-    onToggleDeleteConfirm,
-    onHighlightUpdate,
-    onDeleteImage,
-    onRestoreImage,
-    resetHideTimer
-}: ImageCarouselProps) {
-    const LOAD_MORE_AHEAD = 50;
+    // ✅ Auto-hide icons after 3 seconds
+    const resetHideTimer = useCallback(() => {
+        if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+        }
+        setShowIcons(true);
+        hideTimerRef.current = setTimeout(() => {
+            setShowIcons(false);
+        }, 3000);
+    }, []);
 
+    // ✅ Handle mouse movement to show/hide icons
+    const handleMouseMove = useCallback(() => {
+        resetHideTimer();
+    }, [resetHideTimer]);
+
+    // ✅ Convert bytes to MB
     const formatFileSize = (bytes: number): string => {
         const mb = bytes / (1024 * 1024);
         return `${mb.toFixed(2)} MB`;
     };
-
     const formatDate = (dateString: string): string => {
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -63,88 +65,175 @@ export default function ImageCarousel({
         });
     };
 
-    const downloadCompressed = useCallback(async () => {
-        try {
-            const fileResp = await fetch(images[currentIndex].compressed_location);
-            const blob = await fileResp.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = images[currentIndex].filename || "image.jpg";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Download failed:', error);
-        }
-    }, [images, currentIndex]);
-
-    const downloadOriginal = useCallback(async () => {
-        try {
-            const response = await fetch('/api/images/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: images[currentIndex].id })
-            });
-            const { downloadUrl } = await response.json();
-            const fileResp = await fetch(downloadUrl);
-            const blob = await fileResp.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = images[currentIndex].filename || "image.jpg";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Download failed:', error);
-        }
-    }, [images, currentIndex]);
-
-    const galleryItems: ReactImageGalleryItem[] = useMemo(
-        () => images.map((image) => ({
-            original: image.compressed_location,
-            thumbnail: image.thumbnail_location,
-            loading: "lazy" as const,
-            originalAlt: "Gallery image",
-            thumbnailAlt: "Gallery thumbnail",
-        })),
-        [images]
-    );
-
-    // Close on Esc and manage body overflow
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
-                onClose();
+                setIsOpen(false);
+                setShowImageInfo(false);
             }
         };
         if (isOpen) {
             document.addEventListener("keydown", handleEsc);
             document.body.style.overflow = "hidden";
-            resetHideTimer();
+            resetHideTimer(); // Start auto-hide timer when carousel opens
         }
         return () => {
             document.removeEventListener("keydown", handleEsc);
             document.body.style.overflow = "unset";
+            if (hideTimerRef.current) {
+                clearTimeout(hideTimerRef.current);
+            }
         };
-    }, [isOpen, onClose, resetHideTimer]);
+    }, [isOpen, resetHideTimer]);
+    const galleryItems: ReactImageGalleryItem[] = useMemo(
+        () =>
+            images.map((image) => ({
+                original: image.compressed_location,
+                loading: "lazy" as const,
+                originalAlt: "Gallery image",
+                thumbnailAlt: "Gallery thumbnail",
+            })),
+        [images]
+    );
 
+    const downloadCompressed = useCallback(async () => {
+        try {
+            // Fetch the actual file as blob
+            const fileResp = await fetch(images[currentIndex].compressed_location);
+            const blob = await fileResp.blob();
+            const url = window.URL.createObjectURL(blob);
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = images[currentIndex].filename || "image.jpg";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download failed:', error);
+        }
+    }, [images, currentIndex]);
+
+    // Download original image via backend proxy
+    const downloadOriginal = useCallback(async () => {
+        try {
+            const response = await fetch('/api/images/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: images[currentIndex].id,
+                })
+            });
+            const { downloadUrl } = await response.json();
+            const fileResp = await fetch(downloadUrl);
+            const blob = await fileResp.blob();
+            const url = window.URL.createObjectURL(blob);
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = images[currentIndex].filename || "image.jpg";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download failed:', error);
+        }
+    }, [images, currentIndex]);
     const currentImage = images[currentIndex];
 
-    if (!isOpen || !currentImage) return null;
+    const handleHighlightUpdate = useCallback(async () => {
+        if (!currentImage?.id) return;
 
-    return (
+        try {
+            // Use the correct property name (highlight instead of hightlight)
+            const action = currentImage.highlight ? "remove" : "add";
+
+            const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to update highlight:", err.error);
+                alert("Failed to update highlight.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Highlight updated:", data);
+
+            // Update local state to reflect the change
+            setImages(prevImages =>
+                prevImages.map((img: ImageItem) =>
+                    img.id === currentImage.id
+                        ? { ...img, highlight: !img.highlight }
+                        : img
+                )
+            );
+
+
+        } catch (err) {
+            console.error("Error updating highlight:", err);
+            alert("Something went wrong.");
+        }
+    }, [currentImage, setImages]);
+    const handleRestoreGroup = useCallback(async () => {
+        if (!currentImage) return;
+
+        try {
+            const res = await fetch(`/api/groups/images/restore?imageId=${currentImage.id}`, {
+                method: "PATCH",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to RESTORE:", err.error);
+                alert("Failed to RESTORE.");
+                return;
+            }
+            const data = await res.json();
+            alert("Image Resotred Successfully");
+        } catch (err) {
+            alert("Something went wrong.");
+        }
+    }, [currentImage]);
+    const handleConfirmDelete = useCallback(async () => {
+        if (!currentImage?.id) return;
+
+        try {
+            const res = await fetch(`/api/groups/images?imageId=${currentImage.id}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to delete:", err.error);
+                alert("Failed to schedule delete.");
+                return;
+            }
+
+            const data = await res.json();
+            console.log("Delete scheduled:", data);
+            alert("Image will be deleted in 24 hours.");
+            setShowDeleteConfirm(false);
+        } catch (err) {
+            console.error("Error deleting image:", err);
+            alert("Something went wrong.");
+        }
+    }, [currentImage]);
+    return <>
         <div
             className="fixed inset-0 bg-black z-50"
-            onMouseMove={onMouseMove}
-            onClick={() => onToggleInfo()}
+            onMouseMove={handleMouseMove}
+            onClick={() => setShowImageInfo(false)}
         >
             {/* Close button */}
             <button
-                onClick={onClose}
+                onClick={() => setIsOpen(false)}
                 className={`absolute top-4 right-4 z-50 text-white text-3xl hover:text-gray-300 transition-all duration-300 bg-black bg-opacity-50 rounded-full w-12 h-12 flex items-center justify-center ${showIcons ? 'opacity-100' : 'opacity-0'
                     }`}
                 aria-label="Close gallery"
@@ -165,7 +254,7 @@ export default function ImageCarousel({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onToggleInfo();
+                        setShowImageInfo(!showImageInfo);
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
@@ -173,26 +262,25 @@ export default function ImageCarousel({
                 >
                     <Info size={20} />
                 </button>
-
                 {/* Heart icon */}
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onHighlightUpdate(currentImage.id);
+                        handleHighlightUpdate();
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
-                    title="Toggle Highlight"
+                    title="Image Info"
                 >
                     <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                 </button>
+                {/* Delete Icon */}
+                {currentImage && currentImage.delete_at ?
 
-                {/* Delete/Restore Icon */}
-                {currentImage && currentImage.delete_at ? (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onRestoreImage(currentImage.id);
+                            handleRestoreGroup();
                             resetHideTimer();
                         }}
                         className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
@@ -200,20 +288,18 @@ export default function ImageCarousel({
                     >
                         <ArchiveRestore size={20} />
                     </button>
-                ) : (
-                    <button
+
+                    : <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onToggleDeleteConfirm(true);
+                            setShowDeleteConfirm(true);
                             resetHideTimer();
                         }}
                         className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
                         title="Delete Image"
                     >
                         <Trash2 size={20} />
-                    </button>
-                )}
-
+                    </button>}
                 {/* Download Compressed Icon */}
                 <button
                     onClick={(e) => {
@@ -240,8 +326,6 @@ export default function ImageCarousel({
                     <Download size={20} />
                 </button>
             </div>
-
-            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div
                     className="absolute inset-0 z-50 flex items-center justify-center bg-black/65"
@@ -256,13 +340,13 @@ export default function ImageCarousel({
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
-                                onClick={() => onToggleDeleteConfirm(false)}
+                                onClick={() => setShowDeleteConfirm(false)}
                                 className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
-                                onClick={() => onDeleteImage(currentImage.id)}
+                                onClick={handleConfirmDelete}
                                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                             >
                                 Delete
@@ -271,8 +355,6 @@ export default function ImageCarousel({
                     </div>
                 </div>
             )}
-
-            {/* Image Info Panel */}
             {showImageInfo && currentImage && (
                 <div
                     className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-80 text-white p-4 rounded-lg max-w-sm"
@@ -281,7 +363,7 @@ export default function ImageCarousel({
                     <div className="flex justify-between items-start mb-2">
                         <h3 className="text-lg font-semibold">Image Info</h3>
                         <button
-                            onClick={() => onToggleInfo()}
+                            onClick={() => setShowImageInfo(false)}
                             className="text-gray-300 hover:text-white ml-2"
                         >
                             <X size={16} />
@@ -301,9 +383,7 @@ export default function ImageCarousel({
                         <div>
                             <span className="font-medium">Date Taken:</span>
                             <br />
-                            <span className="text-gray-300">
-                                {currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}
-                            </span>
+                            <span className="text-gray-300">{currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}</span>
                         </div>
                         <div>
                             <span className="font-medium">Uploaded:</span>
@@ -312,9 +392,7 @@ export default function ImageCarousel({
                         </div>
                     </div>
                 </div>
-            )}
-
-            <div className="h-full flex flex-col">
+            )}<div className="h-full flex flex-col">
                 <div className="flex-1 relative">
                     <ImageGallery
                         items={galleryItems}
@@ -327,22 +405,44 @@ export default function ImageCarousel({
                         showNav={true}
                         slideDuration={300}
                         slideInterval={0}
-                        onSlide={(index) => {
-                            onSlide(index);
+                        onSlide={(index: number) => {
+                            setCurrentIndex(index);
+                            setShowImageInfo(false);
+                            resetHideTimer();
+
+                            // preload forward
+                            if (index >= preloadedRange.current.max - 2) {
+                                const newMax = Math.min(images.length - 1, preloadedRange.current.max + 10);
+                                for (let i = preloadedRange.current.max + 1; i <= newMax; i++) {
+                                    preloadImage(images[i].compressed_location);
+                                }
+                                preloadedRange.current.max = newMax;
+                            }
+
+                            // preload backward
+                            if (index <= preloadedRange.current.min + 2) {
+                                const newMin = Math.max(0, preloadedRange.current.min - 10);
+                                for (let i = preloadedRange.current.min - 1; i >= newMin; i--) {
+                                    preloadImage(images[i].compressed_location);
+                                }
+                                preloadedRange.current.min = newMin;
+                            }
+
+                            // fetch more if near the end
                             if (images.length - index <= LOAD_MORE_AHEAD && hasMore && !loading) {
-                                onLoadMore();
+                                fetchImages();
                             }
                         }}
-                        renderItem={(item) => (
+                        renderItem={(item: ReactImageGalleryItem) => (
                             <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center">
                                 <Image
                                     src={item.original}
                                     alt={item.originalAlt || ""}
                                     fill
                                     className="object-contain"
-                                    priority={false}
-                                    loading="eager"
-                                    unoptimized
+                                    priority={true} // main image high priority
+                                    sizes="100vw"
+
                                 />
                             </div>
                         )}
@@ -350,5 +450,5 @@ export default function ImageCarousel({
                 </div>
             </div>
         </div>
-    );
+    </>
 }

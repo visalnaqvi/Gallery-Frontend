@@ -4,8 +4,8 @@ import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import { ImageItem } from "@/types/ImageItem";
 import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X } from "lucide-react";
 
-type Props = {
-    images: ImageItem[];
+type props = {
+    images: ImageItem[]
     setCurrentIndex: (value: number | ((prev: number) => number)) => void;
     setImages: (value: ImageItem[] | ((prev: ImageItem[]) => ImageItem[])) => void;
     setIsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -15,97 +15,53 @@ type Props = {
     hasMore: boolean;
     loading: boolean;
     isOpen: boolean;
-    preloadImages: (centerIndex: number, immediate?: boolean) => void;
-    connectionSpeed: 'slow' | 'fast';
-};
+    preloadImage: (src: string) => void
+    preloadedRange: React.RefObject<{ min: number; max: number }>;
+}
 
-// Progressive image component with blur placeholder
-const ProgressiveImage = ({ src, alt, priority = false }: {
-    src: string;
-    alt: string;
-    priority?: boolean;
-}) => {
-    const [imageLoaded, setImageLoaded] = useState(false);
-    const [showBlur, setShowBlur] = useState(true);
-
-    return (
-        <div className="relative h-screen w-screen flex items-center justify-center bg-gray-900">
-            {/* Blur placeholder */}
-            {showBlur && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-32 h-32 bg-gray-800 rounded-lg animate-pulse"></div>
-                </div>
-            )}
-
-            {/* Main image */}
-            <Image
-                src={src}
-                alt={alt}
-                fill
-                className={`object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'
-                    }`}
-                priority={priority}
-                sizes="100vw"
-                onLoad={() => {
-                    setImageLoaded(true);
-                    setTimeout(() => setShowBlur(false), 150);
-                }}
-                onError={() => {
-                    setShowBlur(false);
-                }}
-            />
-
-            {/* Loading indicator */}
-            {!imageLoaded && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                    <div className="flex items-center space-x-2 text-white bg-black bg-opacity-50 px-3 py-2 rounded">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-sm">Loading...</span>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default function ImageGalleryComponent({
-    images,
-    setCurrentIndex,
-    currentIndex,
-    fetchImages,
-    LOAD_MORE_AHEAD,
-    hasMore,
-    loading,
-    setIsOpen,
-    setImages,
-    isOpen,
-    preloadImages,
-    connectionSpeed
-}: Props) {
+export default function ImageGalleryComponent({ images, setCurrentIndex, currentIndex, fetchImages, LOAD_MORE_AHEAD, hasMore, loading, setIsOpen, setImages, isOpen, preloadImage, preloadedRange }: props) {
     const [showIcons, setShowIcons] = useState(true);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const lastSlideTimeRef = useRef<number>(0);
-    const slideVelocityRef = useRef<number>(0);
 
-    // Format functions
-    const formatFileSize = useCallback((bytes: number): string => {
-        const mb = bytes / (1024 * 1024);
-        return `${mb.toFixed(2)} MB`;
-    }, []);
+    // ✅ SOLUTION: Create virtualized gallery items with buffer
+    const BUFFER_SIZE = 3; // Only render current + 3 before + 3 after
 
-    const formatDate = useCallback((dateString: string): string => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+    const virtualizedGalleryItems: ReactImageGalleryItem[] = useMemo(() => {
+        // Calculate the range of items to actually render
+        const startIndex = Math.max(0, currentIndex - BUFFER_SIZE);
+        const endIndex = Math.min(images.length - 1, currentIndex + BUFFER_SIZE);
+
+        // Create array with placeholders for all positions but only real items in buffer
+        return images.map((image, index) => {
+            if (index >= startIndex && index <= endIndex) {
+                // Render actual image within buffer
+                return {
+                    original: image.compressed_location,
+                    loading: "lazy" as const,
+                    originalAlt: "Gallery image",
+                    thumbnailAlt: "Gallery thumbnail",
+                    // Add custom property to identify if this is a real item
+                    renderIndex: index,
+                    isVirtualized: false
+                };
+            } else {
+                // Placeholder for out-of-buffer items
+                return {
+                    original: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMzMzMzMzMiLz48L3N2Zz4=", // 1x1 gray placeholder
+                    loading: "lazy" as const,
+                    originalAlt: "Loading...",
+                    thumbnailAlt: "Loading...",
+                    // Add custom property to identify if this is a placeholder
+                    renderIndex: index,
+                    isVirtualized: true
+                };
+            }
         });
-    }, []);
+    }, [images, currentIndex, BUFFER_SIZE]);
 
-    // Auto-hide icons
+    // ✅ Auto-hide icons after 3 seconds
     const resetHideTimer = useCallback(() => {
         if (hideTimerRef.current) {
             clearTimeout(hideTimerRef.current);
@@ -116,72 +72,55 @@ export default function ImageGalleryComponent({
         }, 3000);
     }, []);
 
+    // ✅ Handle mouse movement to show/hide icons
     const handleMouseMove = useCallback(() => {
         resetHideTimer();
     }, [resetHideTimer]);
 
-    // Keyboard navigation with preloading
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (!isOpen) return;
+    // ✅ Convert bytes to MB
+    const formatFileSize = (bytes: number): string => {
+        const mb = bytes / (1024 * 1024);
+        return `${mb.toFixed(2)} MB`;
+    };
 
-            switch (e.key) {
-                case "Escape":
-                    setIsOpen(false);
-                    setShowImageInfo(false);
-                    break;
-                case "ArrowRight":
-                    if (currentIndex < images.length - 1) {
-                        const newIndex = currentIndex + 1;
-                        setCurrentIndex(newIndex);
-                        preloadImages(newIndex);
-                    }
-                    break;
-                case "ArrowLeft":
-                    if (currentIndex > 0) {
-                        const newIndex = currentIndex - 1;
-                        setCurrentIndex(newIndex);
-                        preloadImages(newIndex);
-                    }
-                    break;
+    const formatDate = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setIsOpen(false);
+                setShowImageInfo(false);
             }
         };
-
         if (isOpen) {
-            document.addEventListener("keydown", handleKeyDown);
+            document.addEventListener("keydown", handleEsc);
             document.body.style.overflow = "hidden";
-            resetHideTimer();
+            resetHideTimer(); // Start auto-hide timer when carousel opens
         }
-
         return () => {
-            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("keydown", handleEsc);
             document.body.style.overflow = "unset";
             if (hideTimerRef.current) {
                 clearTimeout(hideTimerRef.current);
             }
         };
-    }, [isOpen, currentIndex, images.length, setCurrentIndex, setIsOpen, preloadImages, resetHideTimer]);
+    }, [isOpen, resetHideTimer]);
 
-    // Optimized gallery items with progressive loading
-    const galleryItems: ReactImageGalleryItem[] = useMemo(
-        () =>
-            images.map((image, index) => ({
-                original: image.compressed_location,
-                thumbnail: image.thumbnail_location,
-                loading: "lazy" as const,
-                originalAlt: `Gallery image ${index + 1}`,
-                thumbnailAlt: `Gallery thumbnail ${index + 1}`,
-            })),
-        [images]
-    );
-
-    // Download functions
     const downloadCompressed = useCallback(async () => {
         try {
+            // Fetch the actual file as blob
             const fileResp = await fetch(images[currentIndex].compressed_location);
             const blob = await fileResp.blob();
             const url = window.URL.createObjectURL(blob);
-
+            // Trigger download
             const link = document.createElement('a');
             link.href = url;
             link.download = images[currentIndex].filename || "image.jpg";
@@ -194,19 +133,23 @@ export default function ImageGalleryComponent({
         }
     }, [images, currentIndex]);
 
+    // Download original image via backend proxy
     const downloadOriginal = useCallback(async () => {
         try {
             const response = await fetch('/api/images/download', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: images[currentIndex].id })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: images[currentIndex].id,
+                })
             });
-
             const { downloadUrl } = await response.json();
             const fileResp = await fetch(downloadUrl);
             const blob = await fileResp.blob();
             const url = window.URL.createObjectURL(blob);
-
+            // Trigger download
             const link = document.createElement('a');
             link.href = url;
             link.download = images[currentIndex].filename || "image.jpg";
@@ -219,42 +162,15 @@ export default function ImageGalleryComponent({
         }
     }, [images, currentIndex]);
 
-    // Smart slide handler with velocity tracking and adaptive preloading
-    const handleSlide = useCallback((index: number) => {
-        const now = Date.now();
-        const timeDiff = now - lastSlideTimeRef.current;
-        const indexDiff = Math.abs(index - currentIndex);
-
-        // Calculate slide velocity (images per second)
-        if (timeDiff > 0) {
-            slideVelocityRef.current = indexDiff / (timeDiff / 1000);
-        }
-
-        lastSlideTimeRef.current = now;
-        setCurrentIndex(index);
-        setShowImageInfo(false);
-        resetHideTimer();
-
-        // Adaptive preloading based on slide velocity
-        const isFastSliding = slideVelocityRef.current > 2;
-        if (!isFastSliding) {
-            preloadImages(index);
-        }
-
-        // Load more data if needed
-        if (images.length - index <= LOAD_MORE_AHEAD && hasMore && !loading) {
-            fetchImages();
-        }
-    }, [currentIndex, setCurrentIndex, resetHideTimer, preloadImages, images.length, LOAD_MORE_AHEAD, hasMore, loading, fetchImages]);
-
     const currentImage = images[currentIndex];
 
-    // Highlight/favorite functionality
     const handleHighlightUpdate = useCallback(async () => {
         if (!currentImage?.id) return;
 
         try {
+            // Use the correct property name (highlight instead of hightlight)
             const action = currentImage.highlight ? "remove" : "add";
+
             const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
                 method: "PATCH",
             });
@@ -266,6 +182,10 @@ export default function ImageGalleryComponent({
                 return;
             }
 
+            const data = await res.json();
+            console.log("Highlight updated:", data);
+
+            // Update local state to reflect the change
             setImages(prevImages =>
                 prevImages.map((img: ImageItem) =>
                     img.id === currentImage.id
@@ -273,13 +193,13 @@ export default function ImageGalleryComponent({
                         : img
                 )
             );
+
         } catch (err) {
             console.error("Error updating highlight:", err);
             alert("Something went wrong.");
         }
     }, [currentImage, setImages]);
 
-    // Restore functionality
     const handleRestoreGroup = useCallback(async () => {
         if (!currentImage) return;
 
@@ -294,14 +214,13 @@ export default function ImageGalleryComponent({
                 alert("Failed to RESTORE.");
                 return;
             }
-
-            alert("Image Restored Successfully");
+            const data = await res.json();
+            alert("Image Resotred Successfully");
         } catch (err) {
             alert("Something went wrong.");
         }
     }, [currentImage]);
 
-    // Delete functionality
     const handleConfirmDelete = useCallback(async () => {
         if (!currentImage?.id) return;
 
@@ -317,6 +236,8 @@ export default function ImageGalleryComponent({
                 return;
             }
 
+            const data = await res.json();
+            console.log("Delete scheduled:", data);
             alert("Image will be deleted in 24 hours.");
             setShowDeleteConfirm(false);
         } catch (err) {
@@ -324,8 +245,74 @@ export default function ImageGalleryComponent({
             alert("Something went wrong.");
         }
     }, [currentImage]);
+    const preloadRangeFn = async (start: number, end: number) => {
+        const validIndices = Array.from(
+            { length: end - start + 1 },
+            (_, i) => start + i
+        ).filter(i => i >= 0 && i < images.length);
 
-    return (
+        await Promise.all(
+            validIndices.map(i => preloadImage(images[i].compressed_location))
+        );
+    };
+    // ✅ Custom render function for virtualized items
+    const renderVirtualizedItem = useCallback((item: ReactImageGalleryItem) => {
+        // Use custom property to determine if this is a placeholder
+        const isVirtualized = (item as any).isVirtualized;
+        const itemIndex = (item as any).renderIndex;
+
+        if (isVirtualized) {
+            // Show loading placeholder for out-of-buffer items
+            return (
+                <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center bg-gray-900">
+                    <div className="text-white text-lg">Loading...</div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="image-gallery-image relative h-screen w-screen flex items-center justify-center">
+                <Image
+                    src={item.original}
+                    alt={item.originalAlt || ""}
+                    fill
+                    className="object-contain"
+                    priority={itemIndex === currentIndex} // Only prioritize current image
+                    sizes="110vw"
+                />
+            </div>
+        );
+    }, [currentIndex]);
+
+    const handleSlide = useCallback(
+        async (index: number) => {
+            setCurrentIndex(index);
+            setShowImageInfo(false);
+            resetHideTimer();
+
+            // moving forward → extend range
+            if (index >= preloadedRange.current.max - 1) {
+                const newMax = Math.min(images.length - 1, preloadedRange.current.max + 10);
+                await preloadRangeFn(preloadedRange.current.max + 1, newMax);
+                preloadedRange.current.max = newMax;
+            }
+
+            // moving backward → extend range
+            if (index <= preloadedRange.current.min + 1) {
+                const newMin = Math.max(0, preloadedRange.current.min - 10);
+                await preloadRangeFn(newMin, preloadedRange.current.min - 1);
+                preloadedRange.current.min = newMin;
+            }
+
+            // fetch more if close to end
+            if (images.length - index <= LOAD_MORE_AHEAD && hasMore && !loading) {
+                fetchImages();
+            }
+        },
+        [images, hasMore, loading, preloadImage, fetchImages]
+    );
+
+    return <>
         <div
             className="fixed inset-0 bg-black z-50"
             onMouseMove={handleMouseMove}
@@ -338,7 +325,7 @@ export default function ImageGalleryComponent({
                     }`}
                 aria-label="Close gallery"
             >
-                <X size={24} />
+                ×
             </button>
 
             {/* Image counter */}
@@ -346,14 +333,6 @@ export default function ImageGalleryComponent({
                 }`}>
                 {currentIndex + 1} / {images.length}
             </div>
-
-            {/* Connection indicator for slow connections */}
-            {connectionSpeed === 'slow' && (
-                <div className={`absolute top-16 left-4 z-50 text-yellow-400 bg-black bg-opacity-50 px-3 py-1 rounded text-sm transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
-                    }`}>
-                    Slow connection detected
-                </div>
-            )}
 
             {/* Action Icons */}
             <div className={`absolute bottom-4 right-4 z-50 flex gap-3 transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
@@ -370,7 +349,6 @@ export default function ImageGalleryComponent({
                 >
                     <Info size={20} />
                 </button>
-
                 {/* Heart icon */}
                 <button
                     onClick={(e) => {
@@ -378,18 +356,13 @@ export default function ImageGalleryComponent({
                         handleHighlightUpdate();
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
-                    title="Toggle Favorite"
+                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
+                    title="Image Info"
                 >
-                    <HeartIcon
-                        fill={currentImage?.highlight ? "red" : "none"}
-                        stroke={currentImage?.highlight ? "red" : "white"}
-                        size={20}
-                    />
+                    <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                 </button>
-
-                {/* Delete/Restore Icon */}
-                {currentImage && currentImage.delete_at ? (
+                {/* Delete Icon */}
+                {currentImage && currentImage.delete_at ?
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -401,8 +374,7 @@ export default function ImageGalleryComponent({
                     >
                         <ArchiveRestore size={20} />
                     </button>
-                ) : (
-                    <button
+                    : <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setShowDeleteConfirm(true);
@@ -412,9 +384,7 @@ export default function ImageGalleryComponent({
                         title="Delete Image"
                     >
                         <Trash2 size={20} />
-                    </button>
-                )}
-
+                    </button>}
                 {/* Download Compressed Icon */}
                 <button
                     onClick={(e) => {
@@ -442,7 +412,6 @@ export default function ImageGalleryComponent({
                 </button>
             </div>
 
-            {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div
                     className="absolute inset-0 z-50 flex items-center justify-center bg-black/65"
@@ -473,10 +442,9 @@ export default function ImageGalleryComponent({
                 </div>
             )}
 
-            {/* Image Info Panel */}
             {showImageInfo && currentImage && (
                 <div
-                    className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-90 text-white p-4 rounded-lg max-w-sm"
+                    className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-80 text-white p-4 rounded-lg max-w-sm"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-start mb-2">
@@ -502,84 +470,35 @@ export default function ImageGalleryComponent({
                         <div>
                             <span className="font-medium">Date Taken:</span>
                             <br />
-                            <span className="text-gray-300">
-                                {currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}
-                            </span>
+                            <span className="text-gray-300">{currentImage.date_taken ? formatDate(currentImage.date_taken) : "Not Available"}</span>
                         </div>
                         <div>
                             <span className="font-medium">Uploaded:</span>
                             <br />
                             <span className="text-gray-300">{formatDate(currentImage.uploaded_at)}</span>
                         </div>
-                        {currentImage.delete_at && (
-                            <div>
-                                <span className="font-medium text-red-400">Scheduled for deletion:</span>
-                                <br />
-                                <span className="text-red-300">{formatDate(currentImage.delete_at)}</span>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
 
-            {/* Main Gallery */}
             <div className="h-full flex flex-col">
                 <div className="flex-1 relative">
                     <ImageGallery
-                        items={galleryItems}
+                        items={virtualizedGalleryItems}
                         startIndex={currentIndex}
                         showThumbnails={false}
                         showFullscreenButton={false}
                         showPlayButton={false}
                         showBullets={false}
-                        lazyLoad={false}
+                        lazyLoad={true} // ✅ Enable lazy loading
                         showNav={true}
-                        slideDuration={300}
+                        slideDuration={100}
                         slideInterval={0}
-                        onSlide={handleSlide}
-                        renderItem={(item: ReactImageGalleryItem, index?: number) => (
-                            <ProgressiveImage
-                                src={item.original}
-                                alt={item.originalAlt || "Gallery image"}
-                                priority={index === currentIndex}
-                            />
-                        )}
-                        // Custom navigation arrows with better UX
-                        renderLeftNav={(onClick, disabled) => (
-                            <button
-                                onClick={onClick}
-                                disabled={disabled}
-                                className={`absolute left-4 top-1/2 transform -translate-y-1/2 z-40 text-white text-4xl hover:text-gray-300 transition-all duration-300 bg-black bg-opacity-50 rounded-full w-16 h-16 flex items-center justify-center ${showIcons ? 'opacity-100' : 'opacity-0'
-                                    } ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                aria-label="Previous image"
-                            >
-                                ‹
-                            </button>
-                        )}
-                        renderRightNav={(onClick, disabled) => (
-                            <button
-                                onClick={onClick}
-                                disabled={disabled}
-                                className={`absolute right-4 top-1/2 transform -translate-y-1/2 z-40 text-white text-4xl hover:text-gray-300 transition-all duration-300 bg-black bg-opacity-50 rounded-full w-16 h-16 flex items-center justify-center ${showIcons ? 'opacity-100' : 'opacity-0'
-                                    } ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                aria-label="Next image"
-                            >
-                                ›
-                            </button>
-                        )}
+                        onSlide={(index: number) => { handleSlide(index) }}
+                        renderItem={renderVirtualizedItem}
                     />
                 </div>
             </div>
-
-            {/* Loading indicator for more images */}
-            {loading && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50">
-                    <div className="flex items-center space-x-2 text-white bg-black bg-opacity-50 px-3 py-2 rounded">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-sm">Loading more images...</span>
-                    </div>
-                </div>
-            )}
         </div>
-    );
+    </>
 }
