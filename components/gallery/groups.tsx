@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import "react-image-gallery/styles/css/image-gallery.css";
 import { ImageItem } from "@/types/ImageItem";
@@ -27,55 +27,51 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     const loaderRef = useRef<HTMLDivElement | null>(null);
     const [hotImages, setHotImages] = useState(0);
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
-    // Add ref to track current groupId to prevent stale closures
+    const [mode, setMode] = useState("gallery");
+
+    // Add refs to track current values to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
-    const [mode, setMode] = useState("gallery")
-    const preloadedRange = useRef<{ min: number; max: number }>({ min: -1, max: -1 });
 
-    // ✅ Use refs for cache + preloaded images (no re-render)
-    const loadedImagesRef = useRef<Set<string>>(new Set());
-    const cache = useRef<{
-        pages: Map<string, string[]>;
-        allImages: Map<string, string[]>;
-        loadingStates: Map<string, boolean>;
-    }>({
-        pages: new Map(),
-        allImages: new Map(),
-        loadingStates: new Map(),
-    });
+    // Simplified preloading system
+    const preloadedImagesRef = useRef<Set<string>>(new Set());
+    const preloadingRef = useRef<Set<string>>(new Set());
 
+    // Simple preload function
+    const preloadImage = useCallback((src: string): Promise<void> => {
+        if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
+            return Promise.resolve();
+        }
 
+        preloadingRef.current.add(src);
 
-
-    // ✅ Preload image without re-render
-    const preloadImage = useCallback((src: string) => {
-        if (loadedImagesRef.current.has(src)) return Promise.resolve();
-        return new Promise<void>((resolve, reject) => {
+        return new Promise((resolve) => {
             const img = new window.Image();
             img.onload = () => {
-                loadedImagesRef.current.add(src);
+                preloadedImagesRef.current.add(src);
+                preloadingRef.current.delete(src);
                 resolve();
             };
-            img.onerror = reject;
+            img.onerror = () => {
+                preloadingRef.current.delete(src);
+                resolve(); // Don't reject to avoid breaking Promise.all
+            };
             img.src = src;
         });
     }, []);
 
-    // ✅ Reset state function
+    // Reset state function
     const resetState = useCallback(() => {
         setImages([]);
         setPage(0);
         setHasMore(true);
         setLoading(false);
         setHotImages(0);
-        loadedImagesRef.current.clear();
-        cache.current.pages.clear();
-        cache.current.allImages.clear();
-        cache.current.loadingStates.clear();
+        preloadedImagesRef.current.clear();
+        preloadingRef.current.clear();
     }, []);
 
-    // ✅ Fetch images with better state management
+    // Fetch images with better state management
     const fetchImages = useCallback(async (currentPage?: number, resetImages?: boolean) => {
         const actualGroupId = currentGroupIdRef.current;
         const actualSorting = currentSortingRef.current;
@@ -86,12 +82,11 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         // Don't fetch if we don't have more pages (unless it's the first page)
         if (!hasMore && actualPage > 0) return;
 
-        const requestKey = `${actualGroupId}-${actualPage}`;
-
         setLoading(true);
         try {
             const res = await fetch(`/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}&mode=${mode}`);
             const data: ApiResponse = await res.json();
+
             if (res.status === 403) {
                 setIsForbidden(true);
                 return;
@@ -100,6 +95,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
             if (res.status != 200) {
                 return;
             }
+
             if (resetImages || actualPage === 0) {
                 setImages(data.images);
             } else {
@@ -110,17 +106,14 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
             setPage(actualPage + 1);
             setHotImages(data.hotImages);
 
-            // Preload images
-            // data.images.forEach((image) => preloadImage(image.compressed_location));
         } catch (err) {
             console.error("Failed to fetch images", err);
         } finally {
             setLoading(false);
-            cache.current.loadingStates.set(requestKey, false);
         }
     }, [page, hasMore, loading, mode]);
 
-    // ✅ Effect to handle groupId changes
+    // Effect to handle groupId changes
     useEffect(() => {
         if (!groupId) return;
 
@@ -134,9 +127,9 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                 fetchImages(0, true);
             }, 0);
         }
-    }, [groupId, resetState]);
+    }, [groupId, resetState, fetchImages]);
 
-    // ✅ Effect to handle sorting changes
+    // Effect to handle sorting changes
     useEffect(() => {
         if (!groupId) return;
 
@@ -150,27 +143,19 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                 fetchImages(0, true);
             }, 0);
         }
+    }, [sorting, groupId, resetState, fetchImages]);
 
-        if (currentSortingRef.current !== sorting) {
-            console.log("Sorting changed from", currentSortingRef.current, "to", sorting);
-            currentSortingRef.current = sorting;
-            resetState();
-            // Use setTimeout to ensure state is reset before fetching
-            setTimeout(() => {
-                fetchImages(0, true);
-            }, 0);
-        }
-    }, [sorting, groupId, resetState]);
-
+    // Effect to handle mode changes
     useEffect(() => {
+        if (!groupId) return;
+
         resetState();
-        fetchImages(0, true)
-    }, [mode, resetState, groupId])
+        fetchImages(0, true);
+    }, [mode, resetState, groupId]);
 
-
-    // ✅ Infinite scroll observer - separate from main fetch logic
+    // Infinite scroll observer - separate from main fetch logic
     useEffect(() => {
-        if (isOpen) return; // 👈 don't observe if carousel is open
+        if (isOpen) return; // don't observe if carousel is open
 
         let timeoutId: NodeJS.Timeout;
         const observer = new IntersectionObserver(
@@ -184,97 +169,80 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         );
 
         if (loaderRef.current) observer.observe(loaderRef.current);
+
         return () => {
             clearTimeout(timeoutId);
             if (loaderRef.current) observer.unobserve(loaderRef.current);
             observer.disconnect();
         };
-    }, [fetchImages, loading, hasMore, images.length, isOpen]); // 👈 depend on isOpen
+    }, [fetchImages, loading, hasMore, images.length, isOpen]);
 
-    // ✅ Close on Esc and setup auto-hide
+    // Enhanced click handler with improved preloading
+    const handleImageClick = useCallback(async (idx: number) => {
+        console.log("Image clicked, opening gallery at index:", idx);
+        setCurrentIndex(idx);
+        setIsOpen(true);
 
+        // Preload current image immediately
+        const currentSrc = images[idx]?.compressed_location;
+        if (currentSrc) {
+            await preloadImage(currentSrc);
+        }
 
-    // ✅ Click handler to open carousel
-    const handleImageClick = useCallback(
+        // Preload surrounding images in background
+        const INITIAL_PRELOAD_RANGE = 10;
+        const start = Math.max(0, idx - INITIAL_PRELOAD_RANGE);
+        const end = Math.min(images.length - 1, idx + INITIAL_PRELOAD_RANGE);
 
-        async (idx: number) => {
-            console.log("clicked")
-            setCurrentIndex(idx);
-            setIsOpen(true);
-            console.log("preloading")
-            // 🔹 1. Load clicked image first
-            await preloadImage(images[idx].compressed_location);
-
-            // 🔹 2. Define batches (tiered order)
-            const batches: number[][] = [
-                Array.from({ length: 5 }, (_, i) => idx + i + 1),   // next 5
-                Array.from({ length: 5 }, (_, i) => idx + i + 6),   // next 5 after that
-                Array.from({ length: 5 }, (_, i) => idx - i - 1),   // previous 5
-                Array.from({ length: 5 }, (_, i) => idx - i - 6),   // previous 5 before that
-            ].map(batch => batch.filter(i => i >= 0 && i < images.length));
-
-            // 🔹 3. Preload sequentially (parallel inside each batch)
-            for (const batch of batches) {
-                await Promise.all(
-                    batch.map(i => preloadImage(images[i].compressed_location))
-                );
+        const imagesToPreload = [];
+        for (let i = start; i <= end; i++) {
+            if (i !== idx) { // Skip current image as it's already preloaded
+                const src = images[i]?.compressed_location;
+                if (src && !preloadedImagesRef.current.has(src)) {
+                    imagesToPreload.push(src);
+                }
             }
+        }
 
-            // 🔹 4. Update preloadedRange ref
-            preloadedRange.current = {
-                min: Math.max(
-                    0,
-                    Math.min(preloadedRange.current.min, idx - 10, idx) // clamp at 0
-                ),
-                max: Math.min(
-                    images.length - 1,
-                    Math.max(preloadedRange.current.max, idx + 10, idx) // clamp at last index
-                ),
-            };
+        // Preload in batches to avoid overwhelming the browser
+        const batchSize = 3;
+        for (let i = 0; i < imagesToPreload.length; i += batchSize) {
+            const batch = imagesToPreload.slice(i, i + batchSize);
+            Promise.all(batch.map(src => preloadImage(src)));
 
-            // 🔹 5. Fetch more if near end
-            if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
-
-                console.log("fetching mroe")
-                fetchImages();
+            // Small delay between batches
+            if (i + batchSize < imagesToPreload.length) {
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
-        },
-        [images, hasMore, loading, preloadImage, fetchImages, setCurrentIndex, setIsOpen, preloadedRange, LOAD_MORE_AHEAD]
-    );
+        }
 
-
-
-
+        // Fetch more if close to end
+        if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
+            fetchImages();
+        }
+    }, [images, hasMore, loading, preloadImage, fetchImages, LOAD_MORE_AHEAD]);
 
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
 
-    // if (hotImages === 0 && images.length === 0 && !loading) {
-    //     return (
-    //         <InfoToast loading={false} message="No Images in this group" />
-    //     );
-    // }
-
     if (!groupId) {
         return (
             <InfoToast loading={false} message="No groupId provided in URL" />
-        )
-    };
-
+        );
+    }
 
     return (
         <>
-            {/* Grid */}
-            {hotImages > 0 &&
-                <InfoToast loading={true} message={
-                    `Your recent uploaded ${hotImages} images are being processed and will be available shortly...`
-                } />
-            }
-            {/* {
-                isPublic &&
-                <Switch groupId={groupId} />
-            } */}
+            {/* Hot Images Toast */}
+            {hotImages > 0 && (
+                <InfoToast
+                    loading={true}
+                    message={`Your recent uploaded ${hotImages} images are being processed and will be available shortly...`}
+                />
+            )}
+
+            {/* Gallery Grid */}
             <GalleryGrid
                 handleImageClick={handleImageClick}
                 images={images}
@@ -289,10 +257,12 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                 loading={loading}
             />
 
+            {/* Loading indicator */}
             {loading && (
                 <InfoToast loading={true} message="Loading Images" />
             )}
 
+            {/* End of images indicator */}
             {!hasMore && images.length > 0 && (
                 <p className="text-center py-4 text-gray-500">No more images to load</p>
             )}
@@ -301,7 +271,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
             <div ref={loaderRef} className="h-10"></div>
 
             {/* Fullscreen carousel */}
-            {isOpen &&
+            {isOpen && (
                 <ImageGalleryComponent
                     images={images}
                     setCurrentIndex={setCurrentIndex}
@@ -313,12 +283,10 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                     hasMore={hasMore}
                     loading={loading}
                     isOpen={isOpen}
-                    preloadImage={preloadImage}
-                    preloadedRange={preloadedRange}
                     mode={mode}
                     resetState={resetState}
                 />
-            }
+            )}
         </>
     );
 }

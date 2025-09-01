@@ -16,11 +16,11 @@ async function refreshSignedUrl(imgId: string) {
     // signed url valid for 8h
     const [newSignedUrl] = await file.getSignedUrl({
       action: "read",
-      expires: Date.now() + 8 * 60 * 60 * 1000,
+      expires: Date.now() + 24 * 60 * 60 * 1000,
     });
 
     // expiry time 10 min before actual
-    const expireTime = new Date(Date.now() + (8 * 60 - 10) * 60 * 1000);
+    const expireTime = new Date(Date.now() + (24 * 60 - 10) * 60 * 1000);
 
     // run DB update in background (don’t await)
     pool.query(
