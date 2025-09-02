@@ -11,7 +11,7 @@
 }
 
 .groupCard{
-    width: 30%;
+    /* width: 30%; */
     border: 1px solid #dbdbdb;
     border-radius: 10px;
     /* max-width: 300px; */
@@ -20,17 +20,17 @@
     position: relative;
     transition: 0.3s ease;
     cursor: pointer;
-    min-width: 300px;
+    /* min-width: 300px; */
 }
 .groupCard:hover{
     box-shadow: 10px 10px 50px #00000030;
 }
-.groupCardsWrapper{
-    display: flex;
+/* .groupCardsWrapper{
+    display: grid;
     justify-content: flex-start;
     align-items: flex-start;
     flex-wrap: wrap;
-}
+} */
 
 .groupImage{
     display: flex;

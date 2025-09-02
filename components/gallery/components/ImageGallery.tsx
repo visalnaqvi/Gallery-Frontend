@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import { ImageItem } from "@/types/ImageItem";
 import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X } from "lucide-react";
+import { saveAs } from "file-saver";
 
 type props = {
     images: ImageItem[]
@@ -202,21 +203,34 @@ export default function ImageGalleryComponent({
     }, [isOpen, currentIndex, images.length, preloadAroundIndex]);
 
     // Download functions
+    // const downloadCompressed = useCallback(async () => {
+    //     try {
+    //         const fileResp = await fetch(images[currentIndex].compressed_location);
+    //         const blob = await fileResp.blob();
+    //         const url = window.URL.createObjectURL(blob);
+
+    //         const link = document.createElement('a');
+    //         link.href = url;
+    //         link.download = images[currentIndex].filename || "image.jpg";
+    //         document.body.appendChild(link);
+    //         link.click();
+    //         document.body.removeChild(link);
+    //         window.URL.revokeObjectURL(url);
+    //     } catch (error) {
+    //         console.error('Download failed:', error);
+    //     }
+    // }, [images, currentIndex]);
+
     const downloadCompressed = useCallback(async () => {
         try {
             const fileResp = await fetch(images[currentIndex].compressed_location);
             const blob = await fileResp.blob();
-            const url = window.URL.createObjectURL(blob);
 
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = images[currentIndex].filename || "image.jpg";
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
+            // Use file-saver to force download
+            saveAs(blob, images[currentIndex].filename || "image.jpg");
         } catch (error) {
-            console.error('Download failed:', error);
+            console.error("Download failed:", error);
+            alert("Download not supported on this device.");
         }
     }, [images, currentIndex]);
 
@@ -509,8 +523,8 @@ export default function ImageGalleryComponent({
             )}
 
             {/* Image Gallery */}
-            <div className="h-full flex flex-col">
-                <div className="flex-1 relative">
+            <div className="h-full flex items-center justify-center">
+                <div className="w-full max-h-full relative flex items-center justify-center">
                     <ImageGallery
                         items={galleryItems}
                         startIndex={currentIndex}

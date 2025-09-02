@@ -58,7 +58,7 @@ export default function GroupsList() {
                 ) : groups.length === 0 ? (
                     <p>No groups found.</p>
                 ) : (
-                    <div className={styles.groupCardsWrapper}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
 
                         {groups.map(group => (
                             <div key={group.id} className={styles.groupCard}>
