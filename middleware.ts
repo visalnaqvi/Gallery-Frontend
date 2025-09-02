@@ -5,6 +5,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   let publicPaths = [
     '/api/groups/images',
+    '/api/groups/images/restore',
     '/api/images/download',
     '/api/persons',
     '/api/persons/getPersonDetails',

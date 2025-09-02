@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
           id,
           thumbnail,
           name,
-          ARRAY_LENGTH(image_ids, 1) AS total_images
+          total_images
       FROM persons
       WHERE id = $1;
     `;

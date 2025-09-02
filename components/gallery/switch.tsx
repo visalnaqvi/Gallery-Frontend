@@ -17,7 +17,7 @@ export default function Switch() {
     }
 
     return (
-        <div className="bg-white flex gap-4 border-b py-2 px-4 fixed bottom-[20px] right-[20px] rounded-full shadow-lg border border-[#dbdbdb] z-100">
+        <div className="bg-white flex gap-4 border-b py-2 px-4 fixed bottom-[20px] right-[20px] rounded-full shadow-lg border border-[#dbdbdb] z-10">
             {/* Images Tab */}
             <Link
                 href={`/public/gallery-groups?groupId=${groupId}`}
@@ -37,7 +37,7 @@ export default function Switch() {
                     : "text-gray-600 hover:text-blue-500"
                     }`}
             >
-                <User className="pr-2" size={30} />Persons
+                <User className="pr-2" size={30} />People
             </Link>
         </div>
     );

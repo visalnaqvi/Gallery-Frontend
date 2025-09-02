@@ -247,7 +247,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                                 }`}
                                         >
                                             <Users size={16} />
-                                            <span>Persons</span>
+                                            <span>People</span>
                                         </button>
 
                                         <button

@@ -73,15 +73,14 @@ export default function PersonThumbnails({ pageLink, isPublic }: props) {
                 isPublic &&
                 <Switch groupId={groupId} />
             } */}
-            <h2 className="font-semibold text-[30px] mb-[20px]">{persons.length} Persons in Group {groupId}</h2>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", margin: "auto" }}>
+            <h2 className="font-semibold text-[30px] mb-[20px]">{persons.length} People in this Group</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
                 {persons.map((p) => (
                     <Link
                         key={p.person_id}
                         href={`${pageLink}?groupId=${groupId}&personId=${p.person_id}`}
-                        style={{ textDecoration: "none", color: "inherit" }}
                     >
-                        <div className="text-center bg-blue-100 p-3 h-[150px] rounded-md">
+                        <div className="text-center bg-blue-100 p-3 h-[150px] rounded-md flex flex-col justify-center items-center ">
                             {p.face_thumb_bytes ? (
                                 <img
                                     src={p.face_thumb_bytes}
@@ -110,7 +109,7 @@ export default function PersonThumbnails({ pageLink, isPublic }: props) {
                                     No Image
                                 </div>
                             )}
-                            <p className="font-medium mt-2">{p.name}</p>
+                            <p className="font-semibold mt-2 text-blue-800 ">{p.name}</p>
                         </div>
                     </Link>
                 ))}

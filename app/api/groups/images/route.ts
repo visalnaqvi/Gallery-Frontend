@@ -166,6 +166,16 @@ export async function DELETE(req: NextRequest) {
     }
 
     const client = await pool.connect();
+              const token = await getToken({ req, secret: process.env.JWT_SECRET });
+        if (!token) {
+        
+
+     
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+       
+
+          
+        }
     try {
       // update deleted_at = now + 24 hr
       await client.query(
