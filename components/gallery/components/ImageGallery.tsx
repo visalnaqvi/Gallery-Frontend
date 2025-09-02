@@ -234,6 +234,211 @@ export default function ImageGalleryComponent({
         }
     }, [images, currentIndex]);
 
+    const downloadS2 = useCallback(async () => {
+        const currentImage = images[currentIndex];
+        const filename = currentImage.filename || "image.jpg";
+
+        // Device detection
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        const isMobile = isIOS || isAndroid;
+
+        try {
+            // Pass the signed URL and filename to the API
+            const downloadUrl = `/api/download/${currentImage.id}?filename=${encodeURIComponent(filename)}&url=${encodeURIComponent(currentImage.compressed_location)}`;
+
+            if (isMobile) {
+                // Open in new tab with proper headers - let browser handle it
+                window.open(downloadUrl, '_blank');
+            } else {
+                // Desktop: direct download
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            return;
+        } catch (serverError) {
+            console.log('Server download failed:', serverError);
+            // Fallback to your existing client-side method
+        }
+    }, [images, currentIndex]);
+
+    const downloadS3 = useCallback(async () => {
+        // Strategy 2: Server-side download endpoint (Google Drive approach)
+        // This requires backend modification
+        const currentImage = images[currentIndex];
+        const filename = currentImage.filename || "image.jpg";
+
+        // Device detection
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        const isMobile = isIOS || isAndroid;
+        try {
+            const response = await fetch(currentImage.compressed_location);
+            const blob = await response.blob();
+
+            if (isIOS) {
+                // iOS Strategy: Open in new tab with instructions
+                const url = URL.createObjectURL(blob);
+                const newWindow = window.open('', '_blank');
+
+                if (newWindow) {
+                    newWindow.document.write(`
+                        <html>
+                            <head>
+                                <title>Save ${filename}</title>
+                                <meta name="viewport" content="width=device-width, initial-scale=1">
+                                <style>
+                                    body { 
+                                        margin: 0; 
+                                        padding: 20px; 
+                                        background: #f5f5f5; 
+                                        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                                    }
+                                    .container { max-width: 100%; text-align: center; }
+                                    img { 
+                                        max-width: 100%; 
+                                        height: auto; 
+                                        border-radius: 8px;
+                                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                    }
+                                    .instructions { 
+                                        background: #007AFF; 
+                                        color: white; 
+                                        padding: 15px; 
+                                        border-radius: 8px; 
+                                        margin-bottom: 20px;
+                                        font-size: 16px;
+                                    }
+                                    .step { margin: 8px 0; }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="container">
+                                    <div class="instructions">
+                                        <strong>To save this image:</strong>
+                                        <div class="step">1. Long press the image below</div>
+                                        <div class="step">2. Select "Save to Photos"</div>
+                                        <div class="step">3. Or use "Copy" then paste in another app</div>
+                                    </div>
+                                    <img src="${url}" alt="${filename}" />
+                                </div>
+                            </body>
+                        </html>
+                    `);
+                    newWindow.document.close();
+                } else {
+                    // Popup blocked - show alert with instructions
+                    alert("To save this image:\n\n1. Long press the image\n2. Select 'Save to Photos'\n\nNote: Your browser may have blocked the popup. Please allow popups for this site.");
+                }
+
+                // Clean up blob URL after a delay
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+            } else if (isAndroid) {
+                // Android Strategy: Try direct download, fallback to new tab
+                try {
+                    saveAs(blob, filename);
+                } catch (saveError) {
+                    // Fallback: open in new tab
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                }
+            } else {
+                // Desktop: use file-saver
+                saveAs(blob, filename);
+            }
+
+        } catch (clientError) {
+            // Strategy 4: Ultimate fallback - direct link
+            if (isMobile) {
+                // Open image directly and let user save manually
+                window.open(currentImage.compressed_location, '_blank');
+
+                setTimeout(() => {
+                    if (isIOS) {
+                        alert("To save: Long press the image and select 'Save to Photos'");
+                    } else {
+                        alert("To save: Long press the image and select 'Download image'");
+                    }
+                }, 1000);
+            } else {
+                alert("Download failed. Please right-click the image and select 'Save image as...'");
+            }
+        }
+    }, [images, currentIndex]);
+
+    const downloadS1 = useCallback(async () => {
+        try {
+            const currentImage = images[currentIndex];
+            const filename = currentImage.filename || "image.jpg";
+
+            // Device detection
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isAndroid = /Android/.test(navigator.userAgent);
+            const isMobile = isIOS || isAndroid;
+
+            // Strategy 1: Try Web Share API first (like modern platforms do)
+            if (navigator.share && isMobile) {
+                try {
+                    const response = await fetch(currentImage.compressed_location);
+                    const blob = await response.blob();
+                    const file = new File([blob], filename, { type: blob.type });
+
+                    if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            files: [file],
+                            title: 'Save Image',
+                            text: `Save ${filename}`
+                        });
+                        return;
+                    }
+                } catch (shareError) {
+                    console.log('Share API failed, trying alternatives');
+                }
+            }
+
+
+            // Strategy 3: Client-side fallback (your current approach, improved)
+
+
+        } catch (error) {
+            console.error("All download methods failed:", error);
+            alert("Unable to download. Please try again or contact support.");
+        }
+    }, [images, currentIndex]);
+
+    // Backend endpoint needed (Express.js example)
+    // app.get('/api/download/:imageId', async (req, res) => {
+    //     try {
+    //         const { imageId } = req.params;
+    //         const { filename } = req.query;
+    //         
+    //         // Get image data from your storage
+    //         const imageData = await getImageById(imageId);
+    //         
+    //         // Set proper headers for download
+    //         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    //         res.setHeader('Content-Type', 'application/octet-stream');
+    //         res.setHeader('Cache-Control', 'no-cache');
+    //         
+    //         // Stream the file
+    //         const fileStream = await getImageStream(imageData.compressed_location);
+    //         fileStream.pipe(res);
+    //         
+    //     } catch (error) {
+    //         res.status(500).json({ error: 'Download failed' });
+    //     }
+    // });
+
+    // Additional: Share button for mobile (separate from download)
+
+
     const handleHighlightUpdate = useCallback(async () => {
         if (!currentImage?.id) return;
 
@@ -446,6 +651,42 @@ export default function ImageGalleryComponent({
                     title="Download Compressed"
                 >
                     <Download size={20} />
+                </button>
+
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        downloadS1();
+                        resetHideTimer();
+                    }}
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                    title="Download Compressed"
+                >
+                    <Download size={20} /><p>S1</p>
+                </button>
+
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        downloadS2();
+                        resetHideTimer();
+                    }}
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                    title="Download Compressed"
+                >
+                    <Download size={20} /><p>S2</p>
+                </button>
+
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        downloadS3();
+                        resetHideTimer();
+                    }}
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                    title="Download Compressed"
+                >
+                    <Download size={20} /><p>S3</p>
                 </button>
             </div>
 
