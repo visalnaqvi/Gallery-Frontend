@@ -234,38 +234,7 @@ export default function ImageGalleryComponent({
         }
     }, [images, currentIndex]);
 
-    const downloadS2 = useCallback(async () => {
-        const currentImage = images[currentIndex];
-        const filename = currentImage.filename || "image.jpg";
 
-        // Device detection
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        const isAndroid = /Android/.test(navigator.userAgent);
-        const isMobile = isIOS || isAndroid;
-
-        try {
-            // Pass the signed URL and filename to the API
-            const downloadUrl = `/api/download/${currentImage.id}?filename=${encodeURIComponent(filename)}&url=${encodeURIComponent(currentImage.compressed_location)}`;
-
-            if (isMobile) {
-                // Open in new tab with proper headers - let browser handle it
-                window.open(downloadUrl, '_blank');
-            } else {
-                // Desktop: direct download
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = filename;
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-            return;
-        } catch (serverError) {
-            console.log('Server download failed:', serverError);
-            // Fallback to your existing client-side method
-        }
-    }, [images, currentIndex]);
 
     const downloadS3 = useCallback(async () => {
         // Strategy 2: Server-side download endpoint (Google Drive approach)
@@ -412,31 +381,6 @@ export default function ImageGalleryComponent({
             alert("Unable to download. Please try again or contact support.");
         }
     }, [images, currentIndex]);
-
-    // Backend endpoint needed (Express.js example)
-    // app.get('/api/download/:imageId', async (req, res) => {
-    //     try {
-    //         const { imageId } = req.params;
-    //         const { filename } = req.query;
-    //         
-    //         // Get image data from your storage
-    //         const imageData = await getImageById(imageId);
-    //         
-    //         // Set proper headers for download
-    //         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    //         res.setHeader('Content-Type', 'application/octet-stream');
-    //         res.setHeader('Cache-Control', 'no-cache');
-    //         
-    //         // Stream the file
-    //         const fileStream = await getImageStream(imageData.compressed_location);
-    //         fileStream.pipe(res);
-    //         
-    //     } catch (error) {
-    //         res.status(500).json({ error: 'Download failed' });
-    //     }
-    // });
-
-    // Additional: Share button for mobile (separate from download)
 
 
     const handleHighlightUpdate = useCallback(async () => {
@@ -665,17 +609,7 @@ export default function ImageGalleryComponent({
                     <Download size={20} /><p>S1</p>
                 </button>
 
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        downloadS2();
-                        resetHideTimer();
-                    }}
-                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
-                    title="Download Compressed"
-                >
-                    <Download size={20} /><p>S2</p>
-                </button>
+
 
                 <button
                     onClick={(e) => {
