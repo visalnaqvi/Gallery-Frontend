@@ -47,7 +47,7 @@ export default function SimilarFacesList() {
     const fetchData = async (page: number = currentPage) => {
         try {
             setLoading(true);
-            const res = await fetch(`/api/similar_persons?page=${page}&limit=${itemsPerPage}`);
+            const res = await fetch(`/api/similar_persons?groupId=${groupId}&page=${page}&limit=${itemsPerPage}`);
             if (!res.ok) throw new Error("Failed to fetch data");
             const json: ApiResponse = await res.json();
             setPersons(json.data || []);

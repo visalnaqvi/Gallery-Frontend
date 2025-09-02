@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
+    const groupId = parseInt(searchParams.get("groupId") || "10");
     
     // Validate pagination parameters
     if (page < 1) {
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
       JOIN persons p2 ON p2.id = sf.similar_person_id::uuid
       WHERE p1.thumbnail IS NOT NULL
         AND p2.thumbnail IS NOT NULL
+        AND  p1.group_id = ${groupId}
     `;
     
     const countResult = await client.query(countQuery);
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest) {
       JOIN persons p2 ON p2.id = sf.similar_person_id::uuid
       WHERE p1.thumbnail IS NOT NULL
         AND p2.thumbnail IS NOT NULL
+        AND p1.group_id = ${groupId}
       GROUP BY p1.id, p1.thumbnail
       ORDER BY p1.id
       LIMIT $1 OFFSET $2;
