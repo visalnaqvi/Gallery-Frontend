@@ -3,9 +3,9 @@
 import Image from "next/image";
 import { ImageItem } from "@/types/ImageItem";
 import { Share2, Heart, ImageIcon, Trash } from "lucide-react";
-import Switch from "./switch";
-import { useRouter } from "next/navigation";
 import InfoToast from "../infoToast";
+// import { useSession } from "next-auth/react";
+// import { useSearchParams } from "next/navigation";
 type GalleryGridProps = {
     handleImageClick: (index: number) => void;
     images: ImageItem[];
@@ -21,7 +21,32 @@ type GalleryGridProps = {
 };
 
 export default function GalleryGrid({ handleImageClick, images, sorting, setSorting, groupId, personId, isPerson, isPublic, setMode, mode, loading }: GalleryGridProps) {
-    const router = useRouter()
+
+    // const { data: session } = useSession()
+    // const searchParams = useSearchParams();
+    // const userId = searchParams.get("userId");
+    const onCopyLink = async () => {
+        const domain = window.location.origin; // current domain
+        // let user;
+
+        // if (session?.user?.id) {
+        //     user = session.user.id;
+        // } else if (userId) {
+        //     user = userId
+        // }
+        // else {
+        //     const res = await fetch("/api/user/getIdByGroupId?groupId=" + groupId);
+
+        //     user = await res.text();
+        // }
+
+        const link = isPerson
+            ? `${domain}/public/gallery-person?groupId=${groupId}&personId=${personId}`
+            : `${domain}/public/gallery-groups?groupId=${groupId}`;
+
+        await navigator.clipboard.writeText(link);
+        alert("Sharable link copied!");
+    };
     return (
         <>
 
@@ -33,10 +58,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                     <button
                         type="button"
                         onClick={() => {
-                            const domain = window.location.origin; // current domain
-                            const link = isPerson ? `${domain}/public/gallery-person?groupId=${groupId}&personId=${personId}` : `${domain}/public/gallery-groups?groupId=${groupId}`;
-                            navigator.clipboard.writeText(link);
-                            alert("Sharable link copied!");
+                            onCopyLink()
                         }}
                         className="flex justify-center items-center bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 transition"
                     >

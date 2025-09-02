@@ -8,6 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { Menu, User } from "lucide-react";
 import { SideDrawer } from '@/components/SideDrawer';
+import Logo from '@/components/getLogo';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -51,7 +52,7 @@ export default function RootLayout({
                         <Menu />
                       </button>
                     )}
-                    <Image src={logo} alt="logo" width={120} height={40} />
+                    <Logo />
                   </div>
 
                   {/* Right: user icon */}
