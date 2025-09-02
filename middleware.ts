@@ -10,6 +10,8 @@ export async function middleware(req: NextRequest) {
     '/api/persons',
     '/api/persons/getPersonDetails',
     '/api/persons/getPersonImages',
+    '/api/user/getIdByGroupId',
+    '/api/user',
     '/api/persons/updateName'
   ]
   // ✅ Skip all public routes

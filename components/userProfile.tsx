@@ -179,11 +179,9 @@ export default function UserProfile() {
                 </div>
             </div>
 
-            {/* Studio Details Section */}
             <div>
                 <h1 className="text-2xl font-bold mb-2">Studio Details</h1>
 
-                {/* Studio Name */}
                 <label className="block mb-4">
                     <span className="font-medium mb-2 block">Studio Name</span>
                     <input
@@ -195,7 +193,6 @@ export default function UserProfile() {
                     />
                 </label>
 
-                {/* Studio Logo */}
                 <div>
                     <label className="block font-medium">Studio Logo</label>
                     <div className="flex items-center gap-4 mt-2">
