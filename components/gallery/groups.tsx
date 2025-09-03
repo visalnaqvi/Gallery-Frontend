@@ -12,6 +12,12 @@ type ApiResponse = {
     hasMore: boolean;
     hotImages: number;
 };
+type Album = {
+    id: number;
+    name: string;
+    total_images: number;
+    group_id: number;
+};
 
 export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     const searchParams = useSearchParams();
@@ -32,11 +38,33 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     // Add refs to track current values to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentSortingRef = useRef<string>("date_taken");
-
+    const [albums, setAlbums] = useState<Album[]>([]);
     // Simplified preloading system
     const preloadedImagesRef = useRef<Set<string>>(new Set());
     const preloadingRef = useRef<Set<string>>(new Set());
+    const fetchAlbums = useCallback(async () => {
+        if (!groupId) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/albums?groupId=${groupId}`);
+            if (res.status === 403) {
+                setIsForbidden(true);
+                return;
+            }
+            if (!res.ok) return;
 
+            const data = await res.json();
+            setAlbums(data);
+        } catch (err) {
+            console.error("Failed to fetch albums:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [groupId]);
+
+    useEffect(() => {
+        fetchAlbums();
+    }, [fetchAlbums]);
     // Simple preload function
     const preloadImage = useCallback((src: string): Promise<void> => {
         if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
@@ -285,6 +313,8 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                     isOpen={isOpen}
                     mode={mode}
                     resetState={resetState}
+                    albums={albums}
+                    groupId={groupId}
                 />
             )}
         </>

@@ -20,7 +20,12 @@ type ApiResponse = {
     images: ImageItem[];
     hasMore: boolean;
 };
-
+type Album = {
+    id: number;
+    name: string;
+    total_images: number;
+    group_id: number;
+};
 export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     const searchParams = useSearchParams();
     const groupId = searchParams.get("groupId");
@@ -38,7 +43,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
     const LOAD_MORE_AHEAD = 10;
     const loaderRef = useRef<HTMLDivElement | null>(null);
-
+    const [albums, setAlbums] = useState<Album[]>([]);
     // Add refs to track current values to prevent stale closures
     const currentGroupIdRef = useRef<string | null>(null);
     const currentPersonIdRef = useRef<string | null>(null);
@@ -47,7 +52,29 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     // Simplified preloading system (matching the updated ImageGalleryComponent)
     const preloadedImagesRef = useRef<Set<string>>(new Set());
     const preloadingRef = useRef<Set<string>>(new Set());
+    const fetchAlbums = useCallback(async () => {
+        if (!groupId) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/albums?groupId=${groupId}`);
+            if (res.status === 403) {
+                setIsForbidden(true);
+                return;
+            }
+            if (!res.ok) return;
 
+            const data = await res.json();
+            setAlbums(data);
+        } catch (err) {
+            console.error("Failed to fetch albums:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [groupId]);
+
+    useEffect(() => {
+        fetchAlbums();
+    }, [fetchAlbums]);
     // Simple preload function
     const preloadImage = useCallback((src: string): Promise<void> => {
         if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
@@ -397,6 +424,9 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                     isOpen={isOpen}
                     mode={"person"} // Set mode to "person" instead of empty string
                     resetState={resetState}
+                    groupId={groupId}
+                    albums={albums}
+
                 />
             )}
         </>

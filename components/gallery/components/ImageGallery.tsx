@@ -2,10 +2,18 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import { ImageItem } from "@/types/ImageItem";
-import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X } from "lucide-react";
+import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X, Plus, Check } from "lucide-react";
 import { saveAs } from "file-saver";
 import { useSession } from "next-auth/react";
 import { isMobile } from "react-device-detect";
+
+type Album = {
+    id: number;
+    name: string;
+    total_images: number;
+    group_id: number;
+};
+
 type props = {
     images: ImageItem[]
     setCurrentIndex: (value: number | ((prev: number) => number)) => void;
@@ -19,6 +27,8 @@ type props = {
     isOpen: boolean;
     mode?: string;
     resetState: () => void
+    albums: Album[];
+    groupId: string;
 }
 
 export default function ImageGalleryComponent({
@@ -33,13 +43,20 @@ export default function ImageGalleryComponent({
     setImages,
     isOpen,
     mode,
-    resetState
+    resetState,
+    albums,
+    groupId
 }: props) {
     const [showIcons, setShowIcons] = useState(true);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [showImageInfo, setShowImageInfo] = useState(false);
+    const [showAlbums, setShowAlbums] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [albumActionLoading, setAlbumActionLoading] = useState<number | null>(null);
+    const [imageAlbumIds, setImageAlbumIds] = useState<number[]>([]);
+    const [fetchingAlbums, setFetchingAlbums] = useState(false);
     const { data: session } = useSession()
+
     // Simplified preloading system
     const preloadedImagesRef = useRef<Set<string>>(new Set());
     const preloadingRef = useRef<Set<string>>(new Set()); // Track images currently being preloaded
@@ -142,12 +159,133 @@ export default function ImageGalleryComponent({
         });
     };
 
+    // Fetch album IDs for current image
+    const fetchImageAlbums = useCallback(async (imageId: string) => {
+        if (!imageId) return;
+
+        setFetchingAlbums(true);
+        try {
+            const response = await fetch(`/api/groups/images/getAlbums?imageId=${imageId}`);
+            if (!response.ok) {
+                console.error('Failed to fetch image albums');
+                return;
+            }
+
+            const data = await response.json();
+            setImageAlbumIds(data.albumIds || []);
+        } catch (error) {
+            console.error('Error fetching image albums:', error);
+            setImageAlbumIds([]);
+        } finally {
+            setFetchingAlbums(false);
+        }
+    }, []);
+
+    // Check if current image is in a specific album
+    const isImageInAlbum = useCallback((albumId: number): boolean => {
+        // Otherwise use the fetched album IDs
+        return imageAlbumIds.includes(albumId);
+    }, [images, currentIndex, imageAlbumIds]);
+
+    // Handle adding/removing image from album
+    const handleAlbumToggle = useCallback(async (albumId: number) => {
+        const currentImage = images[currentIndex];
+        if (!currentImage?.id) return;
+
+        setAlbumActionLoading(albumId);
+
+        try {
+            const isInAlbum = isImageInAlbum(albumId);
+
+            if (isInAlbum) {
+                // Remove from album
+                const response = await fetch('/api/albums', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mode: 'image',
+                        albumId: albumId,
+                        groupId: parseInt(groupId),
+                        imageId: currentImage.id
+                    }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('Failed to remove image from album:', error);
+                    alert('Failed to remove image from album');
+                    return;
+                }
+
+                // Update local state
+                setImages(prevImages =>
+                    prevImages.map(img =>
+                        img.id === currentImage.id
+                            ? {
+                                ...img,
+                                albums: imageAlbumIds.filter(id => id !== albumId) || []
+                            }
+                            : img
+                    )
+                );
+
+                // Update fetched album IDs
+                setImageAlbumIds(prev => prev.filter(id => id !== albumId));
+
+            } else {
+                // Add to album
+                const response = await fetch('/api/albums', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        imageId: currentImage.id,
+                        albumId: albumId,
+                        groupId: parseInt(groupId)
+                    }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.error('Failed to add image to album:', error);
+                    alert('Failed to add image to album');
+                    return;
+                }
+
+                // Update local state
+                setImages(prevImages =>
+                    prevImages.map(img =>
+                        img.id === currentImage.id
+                            ? {
+                                ...img,
+                                albums: [...(imageAlbumIds || []), albumId]
+                            }
+                            : img
+                    )
+                );
+
+                // Update fetched album IDs
+                setImageAlbumIds(prev => [...prev, albumId]);
+            }
+
+        } catch (error) {
+            console.error('Error toggling album:', error);
+            alert('Something went wrong');
+        } finally {
+            setAlbumActionLoading(null);
+        }
+    }, [currentIndex, images, groupId, isImageInAlbum, setImages]);
+
     // Setup keyboard handlers and body overflow
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
                 setIsOpen(false);
                 setShowImageInfo(false);
+                setShowAlbums(false);
             }
         };
 
@@ -171,7 +309,11 @@ export default function ImageGalleryComponent({
         console.log(`Sliding to index ${index}`);
         setCurrentIndex(index);
         setShowImageInfo(false);
+        setShowAlbums(false); // Close albums panel when sliding
         resetHideTimer();
+
+        // Clear previous album IDs when sliding to new image
+        setImageAlbumIds([]);
 
         // Immediate preload of current image if not already loaded
         const currentSrc = images[index]?.compressed_location;
@@ -203,25 +345,6 @@ export default function ImageGalleryComponent({
         }
     }, [isOpen, currentIndex, images.length, preloadAroundIndex]);
 
-    // Download functions
-    // const downloadCompressed = useCallback(async () => {
-    //     try {
-    //         const fileResp = await fetch(images[currentIndex].compressed_location);
-    //         const blob = await fileResp.blob();
-    //         const url = window.URL.createObjectURL(blob);
-
-    //         const link = document.createElement('a');
-    //         link.href = url;
-    //         link.download = images[currentIndex].filename || "image.jpg";
-    //         document.body.appendChild(link);
-    //         link.click();
-    //         document.body.removeChild(link);
-    //         window.URL.revokeObjectURL(url);
-    //     } catch (error) {
-    //         console.error('Download failed:', error);
-    //     }
-    // }, [images, currentIndex]);
-
     const downloadCompressed = useCallback(async () => {
         try {
             const fileResp = await fetch(images[currentIndex].compressed_location);
@@ -234,7 +357,6 @@ export default function ImageGalleryComponent({
             alert("Download not supported on this device.");
         }
     }, [images, currentIndex]);
-
 
     const handleHighlightUpdate = useCallback(async () => {
         if (!currentImage?.id) return;
@@ -363,7 +485,10 @@ export default function ImageGalleryComponent({
         <div
             className="fixed inset-0 bg-black z-50"
             onMouseMove={handleMouseMove}
-            onClick={() => setShowImageInfo(false)}
+            onClick={() => {
+                setShowImageInfo(false);
+                setShowAlbums(false);
+            }}
         >
             {/* Close button */}
             <button
@@ -389,6 +514,7 @@ export default function ImageGalleryComponent({
                     onClick={(e) => {
                         e.stopPropagation();
                         setShowImageInfo(!showImageInfo);
+                        setShowAlbums(false);
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
@@ -408,6 +534,24 @@ export default function ImageGalleryComponent({
                     title="Toggle Highlight"
                 >
                     <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
+                </button>
+
+                {/* Add to Album icon */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!showAlbums && currentImage?.id) {
+                            // Fetch album IDs when opening the panel
+                            fetchImageAlbums(currentImage.id);
+                        }
+                        setShowAlbums(!showAlbums);
+                        setShowImageInfo(false);
+                        resetHideTimer();
+                    }}
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
+                    title="Add to Album"
+                >
+                    <Plus size={20} />
                 </button>
 
                 {/* Delete/Restore Icon */}
@@ -453,8 +597,6 @@ export default function ImageGalleryComponent({
                         <Download size={20} />
                     </button>
                 )}
-
-
             </div>
 
             {/* Delete Confirmation Modal */}
@@ -527,6 +669,68 @@ export default function ImageGalleryComponent({
                             <span className="text-gray-300">{formatDate(currentImage.uploaded_at)}</span>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Albums Panel */}
+            {showAlbums && currentImage && (
+                <div
+                    className="absolute bottom-4 left-4 z-50 bg-black bg-opacity-90 text-white p-4 rounded-lg max-w-sm max-h-96 overflow-y-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-lg font-semibold">Albums</h3>
+                        <button
+                            onClick={() => setShowAlbums(false)}
+                            className="text-gray-300 hover:text-white ml-2"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    {fetchingAlbums ? (
+                        <div className="flex items-center justify-center py-4">
+                            <div className="w-6 h-6 border border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span className="ml-2 text-sm">Loading albums...</span>
+                        </div>
+                    ) : albums.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No albums available</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {albums.map(album => {
+                                const isInAlbum = isImageInAlbum(album.id);
+                                const isLoading = albumActionLoading === album.id;
+
+                                return (
+                                    <button
+                                        key={album.id}
+                                        onClick={() => handleAlbumToggle(album.id)}
+                                        disabled={isLoading}
+                                        className={`w-full flex items-center justify-between p-2 rounded transition-colors ${isInAlbum
+                                            ? 'bg-green-600 hover:bg-green-700'
+                                            : 'bg-gray-700 hover:bg-gray-600'
+                                            } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <span className="text-sm font-medium truncate">
+                                            {album.name}
+                                        </span>
+                                        <div className="flex items-center gap-2 ml-2">
+                                            <span className="text-xs text-gray-300">
+                                                {album.total_images} photos
+                                            </span>
+                                            {isLoading ? (
+                                                <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                            ) : isInAlbum ? (
+                                                <Check size={16} className="text-white" />
+                                            ) : (
+                                                <Plus size={16} className="text-gray-300" />
+                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
