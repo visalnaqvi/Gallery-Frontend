@@ -9,8 +9,11 @@ type Album = {
     total_images: number;
     groupId: number;
 };
-
-export default function AlbumsComponent() {
+type props = {
+    pageLink: string;
+    isPublic: boolean;
+}
+export default function AlbumsComponent({ pageLink, isPublic }: props) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const groupId = searchParams.get("groupId");
@@ -24,7 +27,7 @@ export default function AlbumsComponent() {
 
     // Navigate to album gallery
     const navigateToAlbum = (albumId: number) => {
-        router.push(`/gallery-albums?groupId=${groupId}&albumId=${albumId}`);
+        router.push(`${pageLink}?groupId=${groupId}&albumId=${albumId}`);
     };
 
     // ✅ Fetch albums

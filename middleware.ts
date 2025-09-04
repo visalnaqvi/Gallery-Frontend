@@ -12,7 +12,11 @@ export async function middleware(req: NextRequest) {
     '/api/persons/getPersonImages',
     '/api/user/getIdByGroupId',
     '/api/user',
-    '/api/persons/updateName'
+    '/api/persons/updateName',
+    '/api/albums',
+    '/api/albums/getAlbumImages',
+    '/api/groups/images/getAlbums'
+
   ]
   // ✅ Skip all public routes
   if (pathname.startsWith("/public/")) {

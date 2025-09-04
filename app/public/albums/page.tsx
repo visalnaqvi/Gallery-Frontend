@@ -8,6 +8,6 @@ import { Suspense } from "react";
 export default function UserProfilePage() {
 
     return (
-        <Suspense fallback={<div>Loading...</div>}><AlbumsComponent isPublic={false} pageLink="/gallery-albums" /></Suspense>
+        <Suspense fallback={<div>Loading...</div>}><AlbumsComponent isPublic={true} pageLink="/public/gallery-albums" /></Suspense>
     );
 }

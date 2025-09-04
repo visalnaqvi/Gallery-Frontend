@@ -63,7 +63,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         className="flex justify-center items-center bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 transition"
                     >
                         <Share2 size={16} className="md:mr-2 mb-1" />
-                        <span className="hidden md:block">Copy Sharable Link</span>
+                        <span className="hidden md:block">Copy Link</span>
                     </button>
                 </div>}
 
