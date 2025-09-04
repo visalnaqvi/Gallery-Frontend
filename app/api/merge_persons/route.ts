@@ -17,7 +17,7 @@ interface MergeDetails {
   merge_person_id: string;
   merge_into_person_id: string;
   faces_updated: number;
-  image_ids_merged: number;
+  totalImages: number;
   similar_faces_deleted_as_main: number;
   similar_faces_deleted_as_similar: number;
   duplicate_similar_faces_removed: number;
@@ -137,15 +137,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
         const targetPerson = personsResult.rows.find(r => r.id === merge_into_person_id);
 
         // Merge image_ids
-        const mergedImageIds = [
-          ...(targetPerson?.image_ids || []),
-          ...(mergePerson?.image_ids || [])
-        ];
+        // const mergedImageIds = [
+        //   ...(targetPerson?.image_ids || []),
+        //   ...(mergePerson?.image_ids || [])
+        // ];
 
-        // Deduplicate UUIDs
-        const dedupedImageIds = [...new Set(mergedImageIds.map((id: string) => id.toString()))];
-        const mergedImageIdsCount = (mergePerson?.image_ids?.length || 0);
-
+        // // Deduplicate UUIDs
+        // const dedupedImageIds = [...new Set(mergedImageIds.map((id: string) => id.toString()))];
+        // const mergedImageIdsCount = (mergePerson?.image_ids?.length || 0);
+        const totalImages = targetPerson?.total_images + mergePerson?.total_images
         // Decide thumbnail based on higher quality_score
         let newThumbnail = targetPerson?.thumbnail;
         let newQualityScore = targetPerson?.quality_score;
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
         // Update target person
         const updateTargetPersonQuery = `
           UPDATE persons
-          SET image_ids = $2::uuid[],
+          SET totalImages = $2,
               thumbnail = $3,
               quality_score = $4
           WHERE id = $1::uuid
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
 
         await client.query(updateTargetPersonQuery, [
           merge_into_person_id,
-          dedupedImageIds,
+          totalImages,
           newThumbnail,
           newQualityScore
         ]);
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
           merge_person_id,
           merge_into_person_id,
           faces_updated: updatedFacesCount,
-          image_ids_merged: mergedImageIdsCount,
+          totalImages: totalImages,
           similar_faces_deleted_as_main: deletedAsMainCount,
           similar_faces_deleted_as_similar: deletedAsSimilarCount,
           duplicate_similar_faces_removed: deduplicatedCount,
