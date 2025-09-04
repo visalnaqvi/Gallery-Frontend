@@ -599,7 +599,7 @@ export default function ImageGalleryComponent({
                         setShowAlbums(false);
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
                     title="View image details"
                 >
                     <Info size={20} />
@@ -612,7 +612,7 @@ export default function ImageGalleryComponent({
                         handleHighlightUpdate();
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg hover:bg-red-500"
+                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg hover:bg-gray-700"
                     title={currentImage?.highlight ? "Remove from favorites" : "Add to favorites"}
                 >
                     <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
@@ -630,7 +630,7 @@ export default function ImageGalleryComponent({
                         setShowImageInfo(false);
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
                     title="Manage albums"
                 >
                     <Plus size={20} />
@@ -644,7 +644,7 @@ export default function ImageGalleryComponent({
                             handleRestoreImage();
                             resetHideTimer();
                         }}
-                        className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                        className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
                         title="Restore image"
                     >
                         <ArchiveRestore size={20} />
@@ -657,7 +657,7 @@ export default function ImageGalleryComponent({
                                 setShowDeleteConfirm(true);
                                 resetHideTimer();
                             }}
-                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
+                            className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
                             title="Delete image"
                         >
                             <Trash2 size={20} />
@@ -673,7 +673,7 @@ export default function ImageGalleryComponent({
                             downloadCompressed();
                             resetHideTimer();
                         }}
-                        className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
+                        className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
                         title="Download image"
                     >
                         <Download size={20} />
