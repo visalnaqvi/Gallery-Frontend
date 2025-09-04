@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload, Eye, Lock } from "lucide-react";
+import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload, Eye, Lock, Folder } from "lucide-react";
 import logo from "../public/logo-white.png";
 import { useSession } from 'next-auth/react';
 interface Group {
@@ -107,6 +107,8 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             handleNavigate(`/groups/settings?groupId=${groupId}`);
         } else if (tab === 'upload') {
             handleNavigate('/upload?groupId=' + groupId);
+        } else if (tab === 'albums') {
+            handleNavigate('/albums?groupId=' + groupId);
         }
     };
 
@@ -125,6 +127,8 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                 return pathname.startsWith('/groups/settings');
             case 'upload':
                 return pathname.startsWith('/upload');
+            case 'albums':
+                return pathname.startsWith('/albums');
             default:
                 return false;
         }
@@ -248,6 +252,17 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                         >
                                             <Users size={16} />
                                             <span>People</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleGroupNavigation(group.id, 'albums')}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'albums')
+                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                                                : 'hover:bg-blue-700 text-blue-100'
+                                                }`}
+                                        >
+                                            <Folder size={16} />
+                                            <span>Albums</span>
                                         </button>
 
                                         <button

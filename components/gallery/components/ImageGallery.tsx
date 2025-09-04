@@ -2,7 +2,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageGallery, { ReactImageGalleryItem } from "react-image-gallery";
 import { ImageItem } from "@/types/ImageItem";
-import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X, Plus, Check } from "lucide-react";
+import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X, Plus, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { saveAs } from "file-saver";
 import { useSession } from "next-auth/react";
 import { isMobile } from "react-device-detect";
@@ -234,6 +234,22 @@ export default function ImageGalleryComponent({
                 // Update fetched album IDs
                 setImageAlbumIds(prev => prev.filter(id => id !== albumId));
 
+                // Handle navigation and image removal if in album mode
+                if (mode === 'album') {
+                    const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
+
+                    if (nextIndex >= 0 && images.length > 1) {
+                        setCurrentIndex(nextIndex);
+                    } else {
+                        setIsOpen(false);
+                    }
+
+                    resetState();
+                    setTimeout(() => {
+                        fetchImages(0, true);
+                    }, 0);
+                }
+
             } else {
                 // Add to album
                 const response = await fetch('/api/albums', {
@@ -277,7 +293,27 @@ export default function ImageGalleryComponent({
         } finally {
             setAlbumActionLoading(null);
         }
-    }, [currentIndex, images, groupId, isImageInAlbum, setImages]);
+    }, [currentIndex, images, groupId, isImageInAlbum, setImages, mode, resetState, fetchImages, setCurrentIndex, setIsOpen, imageAlbumIds]);
+
+    // Handle browser back button and mobile back gesture
+    useEffect(() => {
+        const handlePopState = (event: PopStateEvent) => {
+            if (isOpen) {
+                event.preventDefault();
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            // Preserve full URL (with query params)
+            window.history.pushState({ galleryOpen: true }, '', window.location.href);
+            window.addEventListener('popstate', handlePopState);
+        }
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [isOpen, setIsOpen]);
 
     // Setup keyboard handlers and body overflow
     useEffect(() => {
@@ -302,7 +338,7 @@ export default function ImageGalleryComponent({
                 clearTimeout(hideTimerRef.current);
             }
         };
-    }, [isOpen, resetHideTimer]);
+    }, [isOpen, resetHideTimer, setIsOpen]);
 
     // Enhanced slide handler with improved preloading
     const handleSlide = useCallback(async (index: number) => {
@@ -479,6 +515,19 @@ export default function ImageGalleryComponent({
         }
     }, [currentIndex, images, setImages]);
 
+    // Custom navigation functions
+    const goToPrevious = useCallback(() => {
+        if (currentIndex > 0) {
+            handleSlide(currentIndex - 1);
+        }
+    }, [currentIndex, handleSlide]);
+
+    const goToNext = useCallback(() => {
+        if (currentIndex < images.length - 1) {
+            handleSlide(currentIndex + 1);
+        }
+    }, [currentIndex, images.length, handleSlide]);
+
     const currentImage = images[currentIndex];
 
     return (
@@ -506,6 +555,39 @@ export default function ImageGalleryComponent({
                 {currentIndex + 1} / {images.length}
             </div>
 
+            {/* Custom Navigation Arrows */}
+            {images.length > 1 && (
+                <>
+                    {/* Previous Arrow */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            goToPrevious();
+                        }}
+                        disabled={currentIndex === 0}
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/70 bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed ${showIcons ? 'opacity-100' : 'opacity-0'
+                            }`}
+                        aria-label="Previous image"
+                    >
+                        <ChevronLeft size={24} />
+                    </button>
+
+                    {/* Next Arrow */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            goToNext();
+                        }}
+                        disabled={currentIndex === images.length - 1}
+                        className={`absolute right-4 top-1/2 -translate-y-1/2 z-40 p-3 bg-black/70 bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed ${showIcons ? 'opacity-100' : 'opacity-0'
+                            }`}
+                        aria-label="Next image"
+                    >
+                        <ChevronRight size={24} />
+                    </button>
+                </>
+            )}
+
             {/* Action Icons */}
             <div className={`absolute bottom-4 right-4 z-50 flex gap-3 transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
                 }`}>
@@ -518,7 +600,7 @@ export default function ImageGalleryComponent({
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full hover:bg-blue-500 transition-colors duration-200 shadow-lg"
-                    title="Image Info"
+                    title="View image details"
                 >
                     <Info size={20} />
                 </button>
@@ -530,8 +612,8 @@ export default function ImageGalleryComponent({
                         handleHighlightUpdate();
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg"
-                    title="Toggle Highlight"
+                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg hover:bg-red-500"
+                    title={currentImage?.highlight ? "Remove from favorites" : "Add to favorites"}
                 >
                     <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                 </button>
@@ -549,7 +631,7 @@ export default function ImageGalleryComponent({
                         resetHideTimer();
                     }}
                     className="p-3 bg-gray-900 text-white rounded-full hover:bg-purple-500 transition-colors duration-200 shadow-lg"
-                    title="Add to Album"
+                    title="Manage albums"
                 >
                     <Plus size={20} />
                 </button>
@@ -563,7 +645,7 @@ export default function ImageGalleryComponent({
                             resetHideTimer();
                         }}
                         className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
-                        title="Restore Image"
+                        title="Restore image"
                     >
                         <ArchiveRestore size={20} />
                     </button>
@@ -576,7 +658,7 @@ export default function ImageGalleryComponent({
                                 resetHideTimer();
                             }}
                             className="p-3 bg-gray-900 text-white rounded-full hover:bg-red-500 transition-colors duration-200 shadow-lg"
-                            title="Delete Image"
+                            title="Delete image"
                         >
                             <Trash2 size={20} />
                         </button>
@@ -592,7 +674,7 @@ export default function ImageGalleryComponent({
                             resetHideTimer();
                         }}
                         className="p-3 bg-gray-900 text-white rounded-full hover:bg-green-500 transition-colors duration-200 shadow-lg"
-                        title="Download Compressed"
+                        title="Download image"
                     >
                         <Download size={20} />
                     </button>
@@ -734,9 +816,15 @@ export default function ImageGalleryComponent({
                 </div>
             )}
 
-            {/* Image Gallery */}
+            {/* Image Gallery - Hidden navigation arrows */}
             <div className="h-full flex items-center justify-center">
                 <div className="w-full max-h-full relative flex items-center justify-center">
+                    <style jsx>{`
+                        .image-gallery-left-nav,
+                        .image-gallery-right-nav {
+                            display: none !important;
+                        }
+                    `}</style>
                     <ImageGallery
                         items={galleryItems}
                         startIndex={currentIndex}
@@ -745,7 +833,7 @@ export default function ImageGalleryComponent({
                         showPlayButton={false}
                         showBullets={false}
                         lazyLoad={false} // Disabled since we're handling preloading manually
-                        showNav={true}
+                        showNav={false} // Disable default navigation
                         slideDuration={150}
                         slideInterval={0}
                         onSlide={handleSlide}
