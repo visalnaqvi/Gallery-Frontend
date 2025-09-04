@@ -5,6 +5,7 @@ import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
 import InfoToast from "@/components/infoToast";
 import ImageGalleryComponent from "./components/ImageGallery";
+import SimilarImagesView from "./components/SimilarImagesView";
 import useGallery from "@/hooks/useGallery";
 
 export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
@@ -12,6 +13,8 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
     const groupId = searchParams.get("groupId");
     const [sorting, setSorting] = useState<string>("date_taken");
     const [mode, setMode] = useState("gallery");
+    const [currentView, setCurrentView] = useState<"gallery" | "similar">("gallery");
+    const [currentSimilarImageId, setCurrentSimilarImageId] = useState<string | null>(null);
 
     const {
         // State
@@ -45,6 +48,17 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         sorting
     });
 
+    // Handle similar images view
+    const handleSimilarImagesClick = (similarImageId: string) => {
+        setCurrentSimilarImageId(similarImageId);
+        setCurrentView("similar");
+    };
+
+    const handleBackToGallery = () => {
+        setCurrentView("gallery");
+        setCurrentSimilarImageId(null);
+    };
+
     // Effect to handle mode changes
     useEffect(() => {
         if (!groupId) return;
@@ -62,6 +76,19 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         );
     }
 
+    // Render similar images view
+    if (currentView === "similar" && currentSimilarImageId) {
+        return (
+            <SimilarImagesView
+                groupId={groupId}
+                similarImageId={currentSimilarImageId}
+                onBack={handleBackToGallery}
+                isPublic={isPublic}
+            />
+        );
+    }
+
+    // Render main gallery view
     return (
         <>
             {/* Hot Images Toast */}
@@ -85,6 +112,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                 setMode={setMode}
                 mode={mode}
                 loading={loading}
+                onSimilarImagesClick={handleSimilarImagesClick}
             />
 
             {/* Loading indicator */}

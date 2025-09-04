@@ -8,4 +8,6 @@ size:number;
 uploaded_at:string;    
 highlight:boolean;
 delete_at:string | null;
+similar_image_id?: string;
+    similar_count?: number;
 };
