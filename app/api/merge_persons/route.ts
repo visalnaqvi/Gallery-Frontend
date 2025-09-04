@@ -125,7 +125,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
       // Step 3: Handle persons table - merge image_ids arrays
       // First, get the image_ids from the person being merged
       const getPersonsQuery = `
-          SELECT id, image_ids, thumbnail, quality_score
+          SELECT id, image_ids, thumbnail, quality_score, total_images
           FROM persons
           WHERE id IN ($1::uuid, $2::uuid)
         `;
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<MergeResponse
         // Update target person
         const updateTargetPersonQuery = `
           UPDATE persons
-          SET totalImages = $2,
+          SET total_images = $2,
               thumbnail = $3,
               quality_score = $4
           WHERE id = $1::uuid
