@@ -57,75 +57,169 @@ export default function ImageGalleryComponent({
     const [fetchingAlbums, setFetchingAlbums] = useState(false);
     const { data: session } = useSession()
 
-    // Simplified preloading system
+    // Optimized preloading system
     const preloadedImagesRef = useRef<Set<string>>(new Set());
-    const preloadingRef = useRef<Set<string>>(new Set()); // Track images currently being preloaded
-    const PRELOAD_WINDOW = 15; // Number of images to keep preloaded around current
+    const preloadingRef = useRef<Set<string>>(new Set());
+    const preloadQueueRef = useRef<string[]>([]);
+    const isProcessingQueueRef = useRef(false);
 
-    // Simple preload function
-    const preloadImage = useCallback((src: string): Promise<void> => {
+    // Reduced window for better performance
+    const IMMEDIATE_WINDOW = 5; // Images to load immediately around current
+    const GALLERY_WINDOW = 10; // Total gallery items to create
+
+    // Priority-based preload function
+    const preloadImage = useCallback((src: string, priority: 'high' | 'normal' = 'normal'): Promise<void> => {
         if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
             return Promise.resolve();
         }
 
-        preloadingRef.current.add(src);
+        return new Promise((resolve) => {
+            preloadingRef.current.add(src);
 
-        return new Promise((resolve, reject) => {
             const img = new window.Image();
+
+            // Set priority hints for modern browsers
+            if ('loading' in img) {
+                img.loading = priority === 'high' ? 'eager' : 'lazy';
+            }
+            if ('fetchPriority' in img) {
+                (img as any).fetchPriority = priority === 'high' ? 'high' : 'low';
+            }
+
             img.onload = () => {
                 preloadedImagesRef.current.add(src);
                 preloadingRef.current.delete(src);
                 resolve();
             };
-            img.onerror = (error) => {
+            img.onerror = () => {
                 preloadingRef.current.delete(src);
-                console.warn(`Failed to preload image: ${src}`, error);
-                resolve(); // Don't reject to avoid breaking Promise.all
+                console.warn(`Failed to preload: ${src}`);
+                resolve();
             };
             img.src = src;
         });
     }, []);
 
-    // Generate gallery items WITHOUT virtualization
+    // Queue-based preloading system
+    const processPreloadQueue = useCallback(async () => {
+        if (isProcessingQueueRef.current || preloadQueueRef.current.length === 0) {
+            return;
+        }
+
+        isProcessingQueueRef.current = true;
+
+        try {
+            // Process high priority items first (batch of 3)
+            const highPriorityBatch = preloadQueueRef.current.splice(0, 3);
+            await Promise.all(
+                highPriorityBatch.map(src => preloadImage(src, 'high'))
+            );
+
+            // Small delay before processing normal priority
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Process remaining items in smaller batches
+            while (preloadQueueRef.current.length > 0) {
+                const batch = preloadQueueRef.current.splice(0, 2);
+                await Promise.all(
+                    batch.map(src => preloadImage(src, 'normal'))
+                );
+
+                // Longer delay between normal priority batches
+                if (preloadQueueRef.current.length > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+            }
+        } finally {
+            isProcessingQueueRef.current = false;
+        }
+    }, [preloadImage]);
+
+    // Optimized gallery items - only create items around current index
     const galleryItems: ReactImageGalleryItem[] = useMemo(() => {
-        return images.map((image, index) => ({
-            original: image.compressed_location,
-            loading: "lazy" as const,
-            originalAlt: `Gallery image ${index + 1}`,
-            thumbnailAlt: `Gallery thumbnail ${index + 1}`,
-        }));
-    }, [images]);
+        // Create a smaller window of gallery items around current index
+        const start = Math.max(0, currentIndex - GALLERY_WINDOW);
+        const end = Math.min(images.length - 1, currentIndex + GALLERY_WINDOW);
 
-    // Preload images around current index
-    const preloadAroundIndex = useCallback(async (index: number) => {
-        const start = Math.max(0, index - PRELOAD_WINDOW);
-        const end = Math.min(images.length - 1, index + PRELOAD_WINDOW);
+        const items: ReactImageGalleryItem[] = [];
 
-        const toPreload: string[] = [];
+        // Fill with placeholder items for indices before our window
+        for (let i = 0; i < start; i++) {
+            items.push({
+                original: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmMGYwZjAiLz48L3N2Zz4=',
+                loading: "lazy" as const,
+                originalAlt: `Loading image ${i + 1}`,
+            });
+        }
 
+        // Add real items for the visible window
         for (let i = start; i <= end; i++) {
-            const src = images[i]?.compressed_location;
-            if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
-                toPreload.push(src);
+            const image = images[i];
+            if (image) {
+                items.push({
+                    original: image.compressed_location,
+                    loading: i === currentIndex ? "eager" as const : "lazy" as const,
+                    originalAlt: `Gallery image ${i + 1}`,
+                    thumbnailAlt: `Gallery thumbnail ${i + 1}`,
+                });
             }
         }
 
-        if (toPreload.length > 0) {
-            console.log(`Preloading ${toPreload.length} images around index ${index}`);
+        // Fill with placeholder items for indices after our window
+        for (let i = end + 1; i < images.length; i++) {
+            items.push({
+                original: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiNmMGYwZjAiLz48L3N2Zz4=',
+                loading: "lazy" as const,
+                originalAlt: `Loading image ${i + 1}`,
+            });
+        }
 
-            // Preload in smaller batches to avoid overwhelming the browser
-            const batchSize = 5;
-            for (let i = 0; i < toPreload.length; i += batchSize) {
-                const batch = toPreload.slice(i, i + batchSize);
-                await Promise.all(batch.map(src => preloadImage(src)));
+        return items;
+    }, [images, currentIndex, GALLERY_WINDOW]);
 
-                // Small delay between batches to prevent blocking
-                if (i + batchSize < toPreload.length) {
-                    await new Promise(resolve => setTimeout(resolve, 50));
+    // Priority-based preloading around current index
+    const preloadAroundIndex = useCallback(async (index: number) => {
+        // Clear previous queue
+        preloadQueueRef.current = [];
+
+        // High priority: immediate neighbors (±3)
+        const immediateStart = Math.max(0, index - 3);
+        const immediateEnd = Math.min(images.length - 1, index + 3);
+
+        // Normal priority: extended window (±10)
+        const extendedStart = Math.max(0, index - IMMEDIATE_WINDOW);
+        const extendedEnd = Math.min(images.length - 1, index + IMMEDIATE_WINDOW);
+
+        const highPriorityImages: string[] = [];
+        const normalPriorityImages: string[] = [];
+
+        // Collect high priority images (immediate neighbors)
+        for (let i = immediateStart; i <= immediateEnd; i++) {
+            const src = images[i]?.compressed_location;
+            if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
+                highPriorityImages.push(src);
+            }
+        }
+
+        // Collect normal priority images (extended window, excluding immediate)
+        for (let i = extendedStart; i <= extendedEnd; i++) {
+            if (i < immediateStart || i > immediateEnd) {
+                const src = images[i]?.compressed_location;
+                if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
+                    normalPriorityImages.push(src);
                 }
             }
         }
-    }, [images, preloadImage, PRELOAD_WINDOW]);
+
+        // Add to queue: high priority first, then normal priority
+        preloadQueueRef.current = [...highPriorityImages, ...normalPriorityImages];
+
+        console.log(`Queued ${highPriorityImages.length} high priority and ${normalPriorityImages.length} normal priority images for index ${index}`);
+
+        // Start processing the queue
+        processPreloadQueue();
+
+    }, [images, IMMEDIATE_WINDOW, processPreloadQueue]);
 
     // Auto-hide icons after 3 seconds
     const resetHideTimer = useCallback(() => {
@@ -183,9 +277,8 @@ export default function ImageGalleryComponent({
 
     // Check if current image is in a specific album
     const isImageInAlbum = useCallback((albumId: number): boolean => {
-        // Otherwise use the fetched album IDs
         return imageAlbumIds.includes(albumId);
-    }, [images, currentIndex, imageAlbumIds]);
+    }, [imageAlbumIds]);
 
     // Handle adding/removing image from album
     const handleAlbumToggle = useCallback(async (albumId: number) => {
@@ -219,7 +312,6 @@ export default function ImageGalleryComponent({
                     return;
                 }
 
-                // Update local state
                 setImages(prevImages =>
                     prevImages.map(img =>
                         img.id === currentImage.id
@@ -231,10 +323,8 @@ export default function ImageGalleryComponent({
                     )
                 );
 
-                // Update fetched album IDs
                 setImageAlbumIds(prev => prev.filter(id => id !== albumId));
 
-                // Handle navigation and image removal if in album mode
                 if (mode === 'album') {
                     const nextIndex = currentIndex < images.length - 1 ? currentIndex : currentIndex - 1;
 
@@ -271,7 +361,6 @@ export default function ImageGalleryComponent({
                     return;
                 }
 
-                // Update local state
                 setImages(prevImages =>
                     prevImages.map(img =>
                         img.id === currentImage.id
@@ -283,7 +372,6 @@ export default function ImageGalleryComponent({
                     )
                 );
 
-                // Update fetched album IDs
                 setImageAlbumIds(prev => [...prev, albumId]);
             }
 
@@ -305,7 +393,6 @@ export default function ImageGalleryComponent({
         };
 
         if (isOpen) {
-            // Preserve full URL (with query params)
             window.history.pushState({ galleryOpen: true }, '', window.location.href);
             window.addEventListener('popstate', handlePopState);
         }
@@ -340,24 +427,24 @@ export default function ImageGalleryComponent({
         };
     }, [isOpen, resetHideTimer, setIsOpen]);
 
-    // Enhanced slide handler with improved preloading
+    // Enhanced slide handler with dynamic gallery item updates
     const handleSlide = useCallback(async (index: number) => {
         console.log(`Sliding to index ${index}`);
         setCurrentIndex(index);
         setShowImageInfo(false);
-        setShowAlbums(false); // Close albums panel when sliding
+        setShowAlbums(false);
         resetHideTimer();
 
-        // Clear previous album IDs when sliding to new image
         setImageAlbumIds([]);
 
-        // Immediate preload of current image if not already loaded
-        const currentSrc = images[index]?.compressed_location;
-        if (currentSrc && !preloadedImagesRef.current.has(currentSrc)) {
-            await preloadImage(currentSrc);
+        // Check if we need to load the actual image (if it was a placeholder)
+        const currentImage = images[index];
+        if (currentImage?.compressed_location) {
+            // Immediately preload current image with high priority
+            await preloadImage(currentImage.compressed_location, 'high');
         }
 
-        // Preload surrounding images
+        // Start preloading around new index
         preloadAroundIndex(index);
 
         // Fetch more images if close to end
@@ -375,18 +462,23 @@ export default function ImageGalleryComponent({
 
             // Clear any stale preload state
             preloadingRef.current.clear();
+            preloadQueueRef.current = [];
+
+            // Immediately load current image
+            const currentSrc = images[currentIndex]?.compressed_location;
+            if (currentSrc) {
+                preloadImage(currentSrc, 'high');
+            }
 
             // Start preloading around current index
-            preloadAroundIndex(currentIndex);
+            setTimeout(() => preloadAroundIndex(currentIndex), 100);
         }
-    }, [isOpen, currentIndex, images.length, preloadAroundIndex]);
+    }, [isOpen, currentIndex, images.length, preloadAroundIndex, preloadImage]);
 
     const downloadCompressed = useCallback(async () => {
         try {
             const fileResp = await fetch(images[currentIndex].compressed_location);
             const blob = await fileResp.blob();
-
-            // Use file-saver to force download
             saveAs(blob, images[currentIndex].filename || "image.jpg");
         } catch (error) {
             console.error("Download failed:", error);
@@ -558,7 +650,6 @@ export default function ImageGalleryComponent({
             {/* Custom Navigation Arrows */}
             {images.length > 1 && (
                 <>
-                    {/* Previous Arrow */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -572,7 +663,6 @@ export default function ImageGalleryComponent({
                         <ChevronLeft size={24} />
                     </button>
 
-                    {/* Next Arrow */}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -623,7 +713,6 @@ export default function ImageGalleryComponent({
                     onClick={(e) => {
                         e.stopPropagation();
                         if (!showAlbums && currentImage?.id) {
-                            // Fetch album IDs when opening the panel
                             fetchImageAlbums(currentImage.id);
                         }
                         setShowAlbums(!showAlbums);

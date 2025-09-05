@@ -71,8 +71,9 @@ export default function useGallery({
     const [hotImages, setHotImages] = useState(0);
     const [isForbidden, setIsForbidden] = useState<boolean>(false);
     const [albums, setAlbums] = useState<Album[]>([]);
-    const [albumLoading , setAlbumLoading] = useState(false)
-    const [imageLoading , setImageLoading] = useState(false)
+    const [albumLoading, setAlbumLoading] = useState(false);
+    const [imageLoading, setImageLoading] = useState(false);
+    
     // Gallery states
     const [isOpen, setIsOpen] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -87,31 +88,26 @@ export default function useGallery({
     const currentAlbumIdRef = useRef<string | null | undefined>(null);
     const currentSortingRef = useRef<string>("date_taken");
     
-    // Preloading system
-    const preloadedImagesRef = useRef<Set<string>>(new Set());
-    const preloadingRef = useRef<Set<string>>(new Set());
+    // Optimized preloading system - only for critical images
+    const criticalPreloadedRef = useRef<Set<string>>(new Set());
     
-    // Simple preload function
-    const preloadImage = useCallback((src: string): Promise<void> => {
-        if (preloadedImagesRef.current.has(src) || preloadingRef.current.has(src)) {
-            return Promise.resolve();
+    // Lightweight preload function - only for immediate neighbors
+    const preloadCriticalImage = useCallback((src: string): void => {
+        if (criticalPreloadedRef.current.has(src)) return;
+        
+        criticalPreloadedRef.current.add(src);
+        
+        const img = new window.Image();
+        img.loading = 'eager';
+        if ('fetchPriority' in img) {
+            (img as any).fetchPriority = 'high';
         }
-
-        preloadingRef.current.add(src);
-
-        return new Promise((resolve) => {
-            const img = new window.Image();
-            img.onload = () => {
-                preloadedImagesRef.current.add(src);
-                preloadingRef.current.delete(src);
-                resolve();
-            };
-            img.onerror = () => {
-                preloadingRef.current.delete(src);
-                resolve(); // Don't reject to avoid breaking Promise.all
-            };
-            img.src = src;
-        });
+        
+        img.onerror = () => {
+            criticalPreloadedRef.current.delete(src);
+        };
+        
+        img.src = src;
     }, []);
 
     // Reset state function
@@ -121,19 +117,23 @@ export default function useGallery({
         setHasMore(true);
         setLoading(false);
         setHotImages(0);
-        preloadedImagesRef.current.clear();
-        preloadingRef.current.clear();
+        criticalPreloadedRef.current.clear();
     }, []);
-    useEffect(()=>{
-        if(!albumLoading && !imageLoading){
-            setLoading(false)
+
+    // Combine loading states
+    useEffect(() => {
+        if (!albumLoading && !imageLoading) {
+            setLoading(false);
         }
-    },[albumLoading , imageLoading])
+    }, [albumLoading, imageLoading]);
+
     // Fetch albums
     const fetchAlbums = useCallback(async () => {
         if (!groupId) return;
+        
         setLoading(true);
-        setAlbumLoading(true)
+        setAlbumLoading(true);
+        
         try {
             const res = await fetch(`/api/albums?groupId=${groupId}`);
             if (res.status === 403) {
@@ -186,7 +186,8 @@ export default function useGallery({
         if (!hasMore && actualPage > 0) return;
 
         setLoading(true);
-        setImageLoading(true)
+        setImageLoading(true);
+        
         try {
             const apiUrl = buildApiUrl(actualPage, actualSorting);
             const res = await fetch(apiUrl);
@@ -222,50 +223,33 @@ export default function useGallery({
         }
     }, [page, hasMore, loading, mode, buildApiUrl]);
 
-    // Enhanced click handler with improved preloading
+    // Optimized click handler - minimal preloading on click
     const handleImageClick = useCallback(async (idx: number) => {
         console.log("Image clicked, opening gallery at index:", idx);
         setCurrentIndex(idx);
         setIsOpen(true);
 
-        // Preload current image immediately
-        const currentSrc = images[idx]?.compressed_location;
-        if (currentSrc) {
-            await preloadImage(currentSrc);
-        }
+        // Only preload the current image and immediate neighbors (±2)
+        const preloadIndices = [
+            Math.max(0, idx - 2),
+            Math.max(0, idx - 1),
+            idx,
+            Math.min(images.length - 1, idx + 1),
+            Math.min(images.length - 1, idx + 2)
+        ];
 
-        // Preload surrounding images in background
-        const INITIAL_PRELOAD_RANGE = 10;
-        const start = Math.max(0, idx - INITIAL_PRELOAD_RANGE);
-        const end = Math.min(images.length - 1, idx + INITIAL_PRELOAD_RANGE);
-
-        const imagesToPreload = [];
-        for (let i = start; i <= end; i++) {
-            if (i !== idx) { // Skip current image as it's already preloaded
-                const src = images[i]?.compressed_location;
-                if (src && !preloadedImagesRef.current.has(src)) {
-                    imagesToPreload.push(src);
-                }
+        preloadIndices.forEach(i => {
+            const src = images[i]?.compressed_location;
+            if (src) {
+                preloadCriticalImage(src);
             }
-        }
-
-        // Preload in batches to avoid overwhelming the browser
-        const batchSize = 3;
-        for (let i = 0; i < imagesToPreload.length; i += batchSize) {
-            const batch = imagesToPreload.slice(i, i + batchSize);
-            Promise.all(batch.map(src => preloadImage(src)));
-
-            // Small delay between batches
-            if (i + batchSize < imagesToPreload.length) {
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        }
+        });
 
         // Fetch more if close to end
         if (images.length - idx <= LOAD_MORE_AHEAD && hasMore && !loading) {
             fetchImages();
         }
-    }, [images, hasMore, loading, preloadImage, fetchImages, LOAD_MORE_AHEAD]);
+    }, [images, hasMore, loading, preloadCriticalImage, fetchImages, LOAD_MORE_AHEAD]);
 
     // Effect to handle parameter changes
     useEffect(() => {
