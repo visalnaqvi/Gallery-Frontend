@@ -41,7 +41,7 @@ export default function GalleryAlbums({ isPublic }: { isPublic: boolean }) {
         handleImageClick,
         fetchImages,
         resetState,
-
+        getImageSource,
         // Refs
         loaderRef,
 
@@ -152,6 +152,7 @@ export default function GalleryAlbums({ isPublic }: { isPublic: boolean }) {
                     resetState={resetState}
                     groupId={groupId}
                     albums={albums}
+                    getImageSource={getImageSource}
                 />
             )}
         </>

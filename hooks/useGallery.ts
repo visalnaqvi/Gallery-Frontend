@@ -48,6 +48,7 @@ interface UseGalleryReturn {
     fetchImages: (currentPage?: number, resetImages?: boolean) => Promise<void>;
     handleImageClick: (idx: number) => Promise<void>;
     resetState: () => void;
+    getImageSource: (image: ImageItem) => string;
     
     // Refs
     loaderRef: React.RefObject<HTMLDivElement | null>;
@@ -90,7 +91,9 @@ export default function useGallery({
     
     // Optimized preloading system - only for critical images
     const criticalPreloadedRef = useRef<Set<string>>(new Set());
-    
+    const getImageSource = useCallback((image: ImageItem): string => {
+    return window.innerWidth <= 1000 ? image.compressed_location : image.compressed_location_3k;
+}, []);
     // Lightweight preload function - only for immediate neighbors
     const preloadCriticalImage = useCallback((src: string): void => {
         if (criticalPreloadedRef.current.has(src)) return;
@@ -239,7 +242,7 @@ export default function useGallery({
         ];
 
         preloadIndices.forEach(i => {
-            const src = images[i]?.compressed_location;
+            const src = images[i] ? getImageSource(images[i]) : null;
             if (src) {
                 preloadCriticalImage(src);
             }
@@ -341,7 +344,7 @@ export default function useGallery({
         fetchImages,
         handleImageClick,
         resetState,
-        
+        getImageSource,
         // Refs
         loaderRef,
         

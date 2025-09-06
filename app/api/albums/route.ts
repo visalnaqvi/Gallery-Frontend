@@ -1,7 +1,7 @@
 // app/albums/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
-
+import { getToken } from "next-auth/jwt";
 // ✅ PostgreSQL pool setup
 const pool = new Pool({
   connectionString: process.env.DATABASE, // ensure this is in your .env
@@ -16,7 +16,18 @@ export async function GET(req: NextRequest) {
   if (!groupId) {
     return NextResponse.json({ error: "group_id is required" }, { status: 400 });
   }
+const token = await getToken({ req, secret: process.env.JWT_SECRET });
+        if (!token) {
+          const res = await pool.query(`
+            select access from groups where id = $1
+            ` , [groupId])
 
+            if(res.rows[0].access.toLowerCase() != 'public'){
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+
+          
+        }
   try {
     const query = `
       SELECT 

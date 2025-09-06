@@ -26,7 +26,8 @@ type props = {
     loading: boolean;
     isOpen: boolean;
     mode?: string;
-    resetState: () => void
+    resetState: () => void;
+    getImageSource: (image: ImageItem) => string;
     albums: Album[];
     groupId: string;
 }
@@ -44,6 +45,7 @@ export default function ImageGalleryComponent({
     isOpen,
     mode,
     resetState,
+    getImageSource,
     albums,
     groupId
 }: props) {
@@ -157,7 +159,7 @@ export default function ImageGalleryComponent({
             const image = images[i];
             if (image) {
                 items.push({
-                    original: image.compressed_location,
+                    original: getImageSource(image),
                     loading: i === currentIndex ? "eager" as const : "lazy" as const,
                     originalAlt: `Gallery image ${i + 1}`,
                     thumbnailAlt: `Gallery thumbnail ${i + 1}`,
@@ -195,7 +197,7 @@ export default function ImageGalleryComponent({
 
         // Collect high priority images (immediate neighbors)
         for (let i = immediateStart; i <= immediateEnd; i++) {
-            const src = images[i]?.compressed_location;
+            const src = images[i] ? getImageSource(images[i]) : "";
             if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
                 highPriorityImages.push(src);
             }
@@ -204,7 +206,7 @@ export default function ImageGalleryComponent({
         // Collect normal priority images (extended window, excluding immediate)
         for (let i = extendedStart; i <= extendedEnd; i++) {
             if (i < immediateStart || i > immediateEnd) {
-                const src = images[i]?.compressed_location;
+                const src = images[i] ? getImageSource(images[i]) : "";
                 if (src && !preloadedImagesRef.current.has(src) && !preloadingRef.current.has(src)) {
                     normalPriorityImages.push(src);
                 }
@@ -439,9 +441,9 @@ export default function ImageGalleryComponent({
 
         // Check if we need to load the actual image (if it was a placeholder)
         const currentImage = images[index];
-        if (currentImage?.compressed_location) {
+        if (currentImage?.compressed_location && currentImage?.compressed_location_3k) {
             // Immediately preload current image with high priority
-            await preloadImage(currentImage.compressed_location, 'high');
+            await preloadImage(getImageSource(currentImage), 'high');
         }
 
         // Start preloading around new index
@@ -465,7 +467,7 @@ export default function ImageGalleryComponent({
             preloadQueueRef.current = [];
 
             // Immediately load current image
-            const currentSrc = images[currentIndex]?.compressed_location;
+            const currentSrc = getImageSource(images[currentIndex])
             if (currentSrc) {
                 preloadImage(currentSrc, 'high');
             }
@@ -886,9 +888,9 @@ export default function ImageGalleryComponent({
                                             {album.name}
                                         </span>
                                         <div className="flex items-center gap-2 ml-2">
-                                            <span className="text-xs text-gray-300">
+                                            {/* <span className="text-xs text-gray-300">
                                                 {album.total_images} photos
-                                            </span>
+                                            </span> */}
                                             {isLoading ? (
                                                 <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin"></div>
                                             ) : isInAlbum ? (

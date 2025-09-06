@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import InfoToast from "./infoToast";
 
 type Album = {
     id: number;
@@ -17,10 +18,11 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const groupId = searchParams.get("groupId");
-
+    const [isForbidden, setIsForbidden] = useState<boolean>(false)
     const [albums, setAlbums] = useState<Album[]>([]);
     const [newAlbum, setNewAlbum] = useState("");
     const [loading, setLoading] = useState(false);
+    const [newAlLoading, setNewAlLoading] = useState(false);
 
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [albumToDelete, setAlbumToDelete] = useState<Album | null>(null);
@@ -36,6 +38,10 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
         setLoading(true);
         try {
             const res = await fetch(`/api/albums?groupId=${groupId}`);
+            if (res.status === 403) {
+                setIsForbidden(true);
+                return;
+            }
             const data = await res.json();
             setAlbums(data);
         } catch (err) {
@@ -52,6 +58,7 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
     // ✅ Create new album
     const createAlbum = async () => {
         if (!newAlbum.trim() || !groupId) return;
+        setNewAlLoading(true)
         try {
             await fetch("/api/albums", {
                 method: "POST",
@@ -62,6 +69,8 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
             fetchAlbums();
         } catch (err) {
             console.error("Failed to create album:", err);
+        } finally {
+            setNewAlLoading(false)
         }
     };
 
@@ -85,18 +94,20 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
             console.error("Failed to delete album:", err);
         }
     };
-
+    if (isForbidden) {
+        return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
+    }
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100">
             <div className="container mx-auto px-4 py-8 max-w-7xl">
                 {/* Header */}
-                <div className="mb-8">
+                {!loading && <div className="mb-8">
                     <h1 className="text-4xl font-bold text-blue-900 mb-2">Albums</h1>
                     <div className="w-20 h-1 bg-blue-500 rounded-full"></div>
-                </div>
+                </div>}
 
                 {/* Add new album */}
-                <div className="bg-white rounded-xl shadow-lg border border-blue-200 p-6 mb-8">
+                {!loading && <div className="bg-white rounded-xl shadow-lg border border-blue-200 p-6 mb-8">
                     <h2 className="text-xl font-semibold text-blue-800 mb-4">Create New Album</h2>
                     <div className="flex flex-col sm:flex-row gap-3">
                         <input
@@ -108,13 +119,13 @@ export default function AlbumsComponent({ pageLink, isPublic }: props) {
                         />
                         <button
                             onClick={createAlbum}
-                            disabled={!newAlbum.trim()}
+                            disabled={!newAlbum.trim() || newAlLoading}
                             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg"
                         >
                             Add Album
                         </button>
                     </div>
-                </div>
+                </div>}
 
                 {/* Albums list */}
                 {loading ? (

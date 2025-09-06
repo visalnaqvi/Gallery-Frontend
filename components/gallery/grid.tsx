@@ -127,7 +127,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
             {!loading && images && images.length == 0 ?
 
                 <InfoToast loading={false} message="No Images Found" /> :
-                <div className="p-4 grid grid-cols-4 md:grid-cols-8 lg:grid-cols-10 gap-1 md:gap-2">
+                <div className="p-4 grid grid-cols-4 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-14 gap-1 md:gap-2">
                     {images.map((image, idx) => (
                         <div
                             key={`${image.thumbnail_location}-${idx}`}
