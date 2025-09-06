@@ -15,6 +15,14 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { resizeImage } from './resize';
 
+interface ImageMeta {
+    id: string;
+    location: string | null;
+    filename: string;
+    size: number;
+    uploaded_at: string;
+}
+
 interface QueueItem {
     id: string;
     file: File;
@@ -131,23 +139,11 @@ class UploadQueueManager {
         try {
             const uuid = item.id;
             const timestamp = new Date().toISOString();
-            const filePath = `u_${uuid}`;
+            const filePath = `${uuid}`;
             const fileRef = ref(storage, filePath);
 
-            // Custom metadata to be stored with the file
-            const customMetadata = {
-                id: uuid,
-                group_id: item.groupId,
-                filename: item.file.name,
-                user_id: item.userId,
-                uploaded_at: timestamp
-            };
-
             await new Promise<void>((resolve, reject) => {
-                // Upload with custom metadata
-                const task = uploadBytesResumable(fileRef, item.file, {
-                    customMetadata: customMetadata
-                });
+                const task = uploadBytesResumable(fileRef, item.file);
                 item.task = task;
 
                 task.on(
@@ -163,25 +159,22 @@ class UploadQueueManager {
                         reject(error);
                     },
                     async () => {
-                        try {
-                            // Get download URL for the uploaded file
-                            const downloadURL = await getDownloadURL(task.snapshot.ref);
 
+
+                        // Save metadata to backend
+                        try {
                             item.status = 'completed';
                             item.uploadedAt = timestamp;
                             item.progress = 100;
-                            item.location = downloadURL;
                             this.stats.completed++;
                             this.stats.uploadedSize += item.file.size;
-
-                            resolve();
-                        } catch (error) {
-                            console.error('Failed to get download URL:', error);
-                            item.status = 'failed';
-                            item.error = 'Failed to get download URL';
-                            this.stats.failed++;
-                            reject(error);
+                            item.location = null; // ✅ store thumbnail URL
+                            await this.saveMetadata(item);
+                        } catch (metaError) {
+                            console.error('Failed to save metadata:', metaError);
                         }
+
+                        resolve();
                     }
                 );
             });
@@ -192,6 +185,30 @@ class UploadQueueManager {
         }
 
         this.notify();
+    }
+
+    private async saveMetadata(item: QueueItem): Promise<void> {
+        const imageMeta: ImageMeta = {
+            id: item.id,
+            location: item.location,
+            filename: item.file.name,
+            size: item.file.size,
+            uploaded_at: item.uploadedAt!,
+        };
+
+        const response = await fetch('/api/update-image-upload-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: item.userId,
+                groupId: item.groupId,
+                images: [imageMeta]
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save metadata');
+        }
     }
 
     pause(): void {
@@ -368,25 +385,25 @@ export default function ProductionImageUploader() {
         }
 
         // Update group status first
-        // try {
-        //     const res = await fetch('/api/groups', {
-        //         method: 'PATCH',
-        //         headers: { 'Content-Type': 'application/json' },
-        //         body: JSON.stringify({ groupId }),
-        //     });
+        try {
+            const res = await fetch('/api/groups', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId }),
+            });
 
-        //     if (!res.ok) {
-        //         const errorText = await res.text();
-        //         console.error('Failed to update group status:', errorText);
-        //         alert('Could not update group status.');
-        //         return;
-        //     }
-        //     console.log('Group status updated to heating');
-        // } catch (error) {
-        //     console.error('Error updating group status:', error);
-        //     alert('Failed to update group status.');
-        //     return;
-        // }
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error('Failed to update group status:', errorText);
+                alert('Could not update group status.');
+                return;
+            }
+            console.log('Group status updated to heating');
+        } catch (error) {
+            console.error('Error updating group status:', error);
+            alert('Failed to update group status.');
+            return;
+        }
 
         uploadManager.addFiles(selectedFiles, groupId, session.user.id);
         setSelectedFiles([]);
@@ -661,6 +678,18 @@ export default function ProductionImageUploader() {
                     </div>
                 </div>
             )}
+
+            {/* Upload Tips */}
+            {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">💡 Upload Tips</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Uploads continue in the background even if you navigate to other pages</li>
+                    <li>• Files are uploaded one at a time for optimal speed and reliability</li>
+                    <li>• You can pause/resume uploads at any time</li>
+                    <li>• Failed uploads can be retried individually or in batch</li>
+                    <li>• Large batches are processed efficiently with progress tracking</li>
+                </ul>
+            </div> */}
 
             {/* Status Indicator for Background Uploads */}
             {uploadState.isProcessing && (
