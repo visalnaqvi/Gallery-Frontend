@@ -367,26 +367,26 @@ export default function ProductionImageUploader() {
             return;
         }
 
-        // Update group status first
-        // try {
-        //     const res = await fetch('/api/groups', {
-        //         method: 'PATCH',
-        //         headers: { 'Content-Type': 'application/json' },
-        //         body: JSON.stringify({ groupId }),
-        //     });
+        // Update group npm runstatus first
+        try {
+            const res = await fetch('/api/groups', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId }),
+            });
 
-        //     if (!res.ok) {
-        //         const errorText = await res.text();
-        //         console.error('Failed to update group status:', errorText);
-        //         alert('Could not update group status.');
-        //         return;
-        //     }
-        //     console.log('Group status updated to heating');
-        // } catch (error) {
-        //     console.error('Error updating group status:', error);
-        //     alert('Failed to update group status.');
-        //     return;
-        // }
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error('Failed to update group status:', errorText);
+                alert('Could not update group status.');
+                return;
+            }
+            console.log('Group status updated to heating');
+        } catch (error) {
+            console.error('Error updating group status:', error);
+            alert('Failed to update group status.');
+            return;
+        }
 
         uploadManager.addFiles(selectedFiles, groupId, session.user.id);
         setSelectedFiles([]);

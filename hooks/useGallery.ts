@@ -92,7 +92,16 @@ export default function useGallery({
     // Optimized preloading system - only for critical images
     const criticalPreloadedRef = useRef<Set<string>>(new Set());
     const getImageSource = useCallback((image: ImageItem): string => {
-    return window.innerWidth <= 1000 ? image.compressed_location : image.compressed_location_3k;
+        if(window.innerWidth <= 1000){
+            return image.compressed_location
+        }else if(window.innerWidth <= 3000 && image.compressed_location_3k != null){
+            return image.compressed_location_3k;
+        }else if(image.location_stripped != null){
+            return image.location_stripped
+        }else if(image.compressed_location_3k != null){
+            return image.compressed_location_3k
+        }
+        return image.compressed_location;
 }, []);
     // Lightweight preload function - only for immediate neighbors
     const preloadCriticalImage = useCallback((src: string): void => {

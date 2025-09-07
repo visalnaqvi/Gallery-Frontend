@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       // fetch paginated images (excluding hot)
 const result = await client.query(
   `
-    SELECT id, filename,location, uploaded_at, size, date_taken, signed_url,signed_url_3k, status , highlight , delete_at 
+    SELECT id, filename,location, uploaded_at, size, date_taken, signed_url,signed_url_3k,signed_url_stripped, status , highlight , delete_at 
     FROM images 
     WHERE group_id = $1 
       AND status != 'hot' 
@@ -135,7 +135,8 @@ const result = await client.query(
             compressed_location_3k: img.signed_url_3k,
             expire_time: null,
             highlight:img.highlight,
-            delete_at:img.delete_at
+            delete_at:img.delete_at,
+            location_stripped: img.signed_url_stripped,
           };
         })
       );

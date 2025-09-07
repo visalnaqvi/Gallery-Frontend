@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
 
             // Fetch images using JOIN with faces table for pagination
             const result = await client.query(
-                `SELECT i.id,i.location , i.filename, i.uploaded_at, i.size, i.date_taken, i.signed_url, i.signed_url_3k, i.highlight
+                `SELECT i.id,i.location , i.filename, i.uploaded_at, i.size, i.date_taken, i.signed_url, i.signed_url_3k, i.signed_url_stripped, i.highlight
          FROM images i
          INNER JOIN album_images f ON i.id = f.image_id
          WHERE i.group_id = $1 AND f.album_id = $2
@@ -133,6 +133,7 @@ export async function GET(req: NextRequest) {
                         date_taken: img.date_taken,
                         compressed_location: img.signed_url,
                         compressed_location_3k: img.signed_url_3k,
+                        location_stripped: img.signed_url_stripped,
                         expire_time: null,
                         highlight: img.highlight
                     };

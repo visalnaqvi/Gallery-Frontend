@@ -479,7 +479,17 @@ export default function ImageGalleryComponent({
 
     const downloadCompressed = useCallback(async () => {
         try {
-            const fileResp = await fetch(images[currentIndex].compressed_location);
+            let src;
+            if (images[currentIndex].location_stripped) {
+                src = images[currentIndex].location_stripped
+            } else if (images[currentIndex].compressed_location_3k) {
+                src = images[currentIndex].compressed_location_3k
+            } else if (images[currentIndex].compressed_location) {
+                src = images[currentIndex].compressed_location
+            } else {
+                return;
+            }
+            const fileResp = await fetch(src);
             const blob = await fileResp.blob();
             saveAs(blob, images[currentIndex].filename || "image.jpg");
         } catch (error) {
