@@ -459,6 +459,7 @@ export default function ProductionImageUploader() {
             </div>
 
             {/* Upload Controls */}
+            {/* Upload Controls */}
             {(selectedFiles.length > 0 || uploadState.stats.total > 0) && (
                 <div className="flex flex-wrap gap-3">
                     {selectedFiles.length > 0 && (
