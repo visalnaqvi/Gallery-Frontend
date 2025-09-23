@@ -82,7 +82,6 @@ export default function LoginForm() {
             {error.password && <p className={styles.errorMsg}>{error.password}</p>}
 
             {error.login && <p className={styles.errorMsg}>{error.login}: Not Able to login</p>}
-
             {loading ? (
                 <GridLoader
                     className="mr-4"
