@@ -7,6 +7,7 @@ import styles from "./styles.module.css"
 import Image from 'next/image';
 import img from "../../public/login.png"
 import InfoToast from '@/components/infoToast';
+import { signIn } from 'next-auth/react';
 export default function AuthPage() {
     const [mode, setMode] = useState<string>('login');
     const [signUpSuccess, setSignUpSuccess] = useState(false)
@@ -23,6 +24,7 @@ export default function AuthPage() {
 
                     {mode === 'login' ? <LoginForm /> : <SignupForm setMode={setMode} setSignUpSuccess={setSignUpSuccess} />}
                     <br></br>
+                    <button onClick={() => signIn("google")}>Login with Google</button>
                     <br></br>
                     <div className={styles.switch}>
 

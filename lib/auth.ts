@@ -1,14 +1,13 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 import { Pool } from "pg";
 
-// ✅ PostgreSQL pool setup
 const pool = new Pool({
-  connectionString: process.env.DATABASE!, // Make sure this is set in .env
+  connectionString: process.env.DATABASE!,
 });
 
-// ✅ Helper to fetch user by email
 async function getUserByEmail(email: string) {
   const client = await pool.connect();
   try {
@@ -23,8 +22,43 @@ async function getUserByEmail(email: string) {
   }
 }
 
+async function createUserWithGoogle(email: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `INSERT INTO users (email, password_hash)
+       VALUES ($1, NULL)
+       RETURNING id, email`,
+      [email]
+    );
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+async function updateGoogleTokens(
+  userId: string,
+  accessToken: string,
+  refreshToken?: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `UPDATE users
+       SET access_token = $1,
+           refresh_token = COALESCE($2, refresh_token)
+       WHERE id = $3`,
+      [accessToken, refreshToken ?? null, userId]
+    );
+  } finally {
+    client.release();
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
+    // ✅ Local credentials login
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -32,9 +66,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+        if (!credentials?.email || !credentials?.password) return null;
 
         const user = await getUserByEmail(credentials.email);
         if (!user) return null;
@@ -43,10 +75,23 @@ export const authOptions: NextAuthOptions = {
           credentials.password,
           user.password_hash
         );
-
         if (!isPasswordValid) return null;
 
         return { id: user.id, email: user.email };
+      },
+    }),
+
+    // ✅ Google login with Drive access
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope:
+            "openid email profile https://www.googleapis.com/auth/drive.readonly",
+          access_type: "offline", // get refresh_token
+          prompt: "consent", // force refresh_token on first login
+        },
       },
     }),
   ],
@@ -54,23 +99,52 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.email = user.email;
+    async redirect({ url, baseUrl }) {
+      // Always go to home page after login
+      return baseUrl + "/";
+    },
+    async jwt({ token, user, account, profile }) {
+      // Case: First login with Google
+      let dbUser
+      if (account?.provider === "google" && profile?.email) {
+        dbUser = await getUserByEmail(profile.email);
+
+        if (!dbUser) {
+          dbUser = await createUserWithGoogle(profile.email);
+        }
+
+        // Update tokens in DB
+        await updateGoogleTokens(
+          dbUser.id,
+          account.access_token!,
+          account.refresh_token
+        );
+
+        token.id = dbUser.id;
+        token.email = dbUser.email;
+        token.accessToken = account.access_token;
       }
+     
+      // Case: Credentials login
+      if (dbUser) {
+        token.id = (dbUser as any).id;
+        token.email = dbUser.email;
+      }
+
       return token;
     },
+
     async session({ session, token }) {
-      if (token?.id && session.user) {
+      if (session.user) {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
+        session.accessToken = token.accessToken;
       }
       return session;
     },
   },
   pages: {
-    signIn: "/auth",
+    signIn: "/", // your custom login page
   },
   secret: process.env.JWT_SECRET,
 };
