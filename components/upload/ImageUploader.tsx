@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, X, Play, Pause, RotateCcw, AlertCircle, CheckCircle, Clock, FileImage, Folder, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Play, Pause, RotateCcw, AlertCircle, CheckCircle, Clock, FileImage, Folder, Image as ImageIcon } from 'lucide-react';
 import { storage } from '@/lib/firebaseClient';
 import {
     getDownloadURL,
@@ -42,6 +43,22 @@ interface UploadState {
     isProcessing: boolean;
     isPaused: boolean;
     stats: UploadStats;
+}
+
+interface DriveFile {
+    id: string;
+    name: string;
+    mimeType: string;
+    thumbnailLink?: string;
+    iconLink?: string;
+    size?: string;
+}
+
+interface SelectedDriveFolder {
+    id: string;
+    name: string;
+    imageFiles: DriveFile[];
+    totalFiles: number;
 }
 
 interface DriveFile {
@@ -314,6 +331,9 @@ export default function ProductionImageUploader() {
     const [selectedDriveFolder, setSelectedDriveFolder] = useState<SelectedDriveFolder | null>(null);
     const [isLoadingFolderContents, setIsLoadingFolderContents] = useState(false);
     const [isDriveImporting, setIsDriveImporting] = useState(false);
+    const [selectedDriveFolder, setSelectedDriveFolder] = useState<SelectedDriveFolder | null>(null);
+    const [isLoadingFolderContents, setIsLoadingFolderContents] = useState(false);
+    const [isDriveImporting, setIsDriveImporting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data: session } = useSession();
@@ -536,6 +556,7 @@ export default function ProductionImageUploader() {
         }
 
         // Update group status first
+        // Update group status first
         try {
             const res = await fetch('/api/groups', {
                 method: 'PATCH',
@@ -723,6 +744,144 @@ export default function ProductionImageUploader() {
                 </div>
             </div>
 
+            {/* Google Drive Import Section */}
+            <div className="bg-white border rounded-lg p-6 shadow-sm">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Folder className="h-5 w-5" />
+                    Import from Google Drive
+                </h3>
+
+                <div className="space-y-4">
+                    {!selectedDriveFolder ? (
+                        <button
+                            onClick={handleImportFromDrive}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                            disabled={isLoadingFolderContents}
+                        >
+                            <Folder className="h-4 w-4" />
+                            {isLoadingFolderContents ? 'Loading...' : 'Select Google Drive Folder'}
+                        </button>
+                    ) : (
+                        <div className="space-y-4">
+                            {/* Selected Folder Info */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-medium text-blue-900 flex items-center gap-2">
+                                            <Folder className="h-4 w-4" />
+                                            {selectedDriveFolder.name}
+                                        </h4>
+                                        <p className="text-sm text-blue-700 mt-1">
+                                            {selectedDriveFolder.imageFiles.length} images found
+                                            {selectedDriveFolder.totalFiles > selectedDriveFolder.imageFiles.length && (
+                                                <span className="text-blue-600">
+                                                    {' '}({selectedDriveFolder.totalFiles - selectedDriveFolder.imageFiles.length} other files)
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedDriveFolder(null)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Image Preview Grid */}
+                            {selectedDriveFolder.imageFiles.length > 0 && (
+                                <div className="space-y-3">
+                                    <h5 className="font-medium text-gray-700 flex items-center gap-2">
+                                        <ImageIcon className="h-4 w-4" />
+                                        Image Files Preview
+                                    </h5>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                        {selectedDriveFolder.imageFiles.slice(0, 12).map((file) => (
+                                            <div key={file.id} className="relative group">
+
+                                                <div className="aspect-square rounded-lg overflow-hidden border">
+                                                    {file.thumbnailLink ? (
+                                                        <img
+                                                            src={file.thumbnailLink}
+                                                            alt={file.name}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            <ImageIcon className="h-6 w-6 text-gray-400" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all rounded-lg flex items-end">
+                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity p-2 w-full">
+                                                        <p className="text-white text-xs truncate font-medium">
+                                                            {file.name}
+                                                        </p>
+                                                        {file.size && (
+                                                            <p className="text-white text-xs opacity-80">
+                                                                {formatFileSize(parseInt(file.size))}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {selectedDriveFolder.imageFiles.length > 12 && (
+                                        <p className="text-sm text-gray-500 text-center">
+                                            ... and {selectedDriveFolder.imageFiles.length - 12} more images
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Import Button */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleImportDriveImages}
+                                    disabled={isDriveImporting || selectedDriveFolder.imageFiles.length === 0}
+                                    className="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                >
+                                    {isDriveImporting ? (
+                                        <>
+                                            <Clock className="h-4 w-4 animate-spin" />
+                                            Setting up import...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="h-4 w-4" />
+                                            Import {selectedDriveFolder.imageFiles.length} Images
+                                        </>
+                                    )}
+                                </button>
+
+                                <button
+                                    onClick={handleImportFromDrive}
+                                    className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                                    disabled={isDriveImporting}
+                                >
+                                    <Folder className="h-4 w-4" />
+                                    Choose Different Folder
+                                </button>
+                            </div>
+
+                            {selectedDriveFolder.imageFiles.length === 0 && (
+                                <div className="text-center py-4">
+                                    <p className="text-gray-500">No image files found in this folder.</p>
+                                    <button
+                                        onClick={handleImportFromDrive}
+                                        className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                    >
+                                        Select a different folder
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {/* File Selection Area */}
             <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
@@ -749,6 +908,7 @@ export default function ProductionImageUploader() {
                     Drop images here or click to select
                 </p>
                 <p className="text-lg font-medium text-gray-900 mb-2">
+                    Uploading Images Directly
                     Uploading Images Directly
                 </p>
                 <p className="text-sm text-gray-500">
