@@ -93,7 +93,7 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope:
-            "openid email profile https://www.googleapis.com/auth/drive.readonly",
+            "openid email profile https://www.googleapis.com/auth/drive.file",
           access_type: "offline", // get refresh_token
           prompt: "consent", // force refresh_token on first login
         },
