@@ -26,7 +26,7 @@ export default function RootLayout({
   const [drawerOpen, setDrawerOpen] = useState(true);
 
   const hideHeader = pathname.startsWith('/auth');
-  const isPublic = pathname.startsWith('/public')
+  const isPublic = pathname.startsWith('/public') || pathname.startsWith('/snapper')
   const isHomePage = pathname === '/';
 
   const handleNavigate = (target: string) => {

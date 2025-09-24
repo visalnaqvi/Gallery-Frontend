@@ -19,20 +19,12 @@ export async function middleware(req: NextRequest) {
 
   ]
   // ✅ Skip all public routes
-  if (pathname.startsWith("/public/")) {
+  if (pathname.startsWith("/public/") || pathname.startsWith("/snapper/")) {
     return NextResponse.next();
   }
 
   // ✅ Skip auth routes
   if (pathname.startsWith("/auth")) {
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith("/privacy-policy")) {
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith("/terms-of-service")) {
     return NextResponse.next();
   }
 
