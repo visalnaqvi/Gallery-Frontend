@@ -37,7 +37,8 @@ export default function AuthPage() {
                             <span className="text-gray-700 font-medium">Continue with Google</span>
                         </button>
                     </div>
-
+                    <a href="/snapper/privacy-policy" className='text-white font-bold text-lg'>Read Our Privacy Policy</a>
+                    <a href="/snapper/terms-of-service" className='text-white font-bold text-lg'>Read Our Terms of Service</a>
                     {/* Divider
                         <div className="flex items-center w-full max-w-sm my-6">
                             <div className="flex-grow border-t border-gray-300"></div>
