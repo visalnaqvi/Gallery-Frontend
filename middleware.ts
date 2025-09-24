@@ -28,6 +28,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/privacy-policy")) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/terms-of-service")) {
+    return NextResponse.next();
+  }
+
   if (pathname.startsWith("/api/auth")) {
     return NextResponse.next();
   }
