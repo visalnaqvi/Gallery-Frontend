@@ -8,6 +8,8 @@ import Image from 'next/image';
 import img from "../../public/login.png"
 import InfoToast from '@/components/infoToast';
 import { signIn } from 'next-auth/react';
+import google from "../../public/google-icon-logo-svgrepo-com.svg"
+import logo from "../../public/logo-white.png"
 export default function AuthPage() {
     const [mode, setMode] = useState<string>('login');
     const [signUpSuccess, setSignUpSuccess] = useState(false)
@@ -20,18 +22,53 @@ export default function AuthPage() {
 
             }
             <div className={styles.formHolder}>
-                <div className={styles.left}>
-
-                    {mode === 'login' ? <LoginForm /> : <SignupForm setMode={setMode} setSignUpSuccess={setSignUpSuccess} />}
-                    <br></br>
-                    <button onClick={() => signIn("google")}>Login with Google</button>
-                    <br></br>
-                    <div className={styles.switch}>
-
-                        {mode === 'login' ? <p>Don't have an account? <span onClick={() => setMode('signup')}>Sign Up</span></p> : <p>Already have an account? <span onClick={() => setMode('login')}>Login</span></p>}
+                <div className={`${styles.left} bg-blue-600 h-full flex flex-col items-center justify-center rounded-md  p-8 gap-y-6`}>
+                    {/* Logo */}
+                    <Image src={logo} alt="logo" width={300} className="block" />
+                    <p className='text-white font-bold text-lg'>Let's get started!</p>
+                    {/* White card with Google button */}
+                    <div className="flex flex-col items-center justify-center w-full p-8 bg-white rounded-2xl shadow-lg gap-y-4">
+                        {/* Google login button */}
+                        <button
+                            onClick={() => signIn("google")}
+                            className="flex items-center justify-center gap-3 w-full max-w-sm px-6 py-3 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition"
+                        >
+                            <Image src={google} alt="Google Logo" width={24} height={24} />
+                            <span className="text-gray-700 font-medium">Continue with Google</span>
+                        </button>
                     </div>
 
+                    {/* Divider
+                        <div className="flex items-center w-full max-w-sm my-6">
+                            <div className="flex-grow border-t border-gray-300"></div>
+                            <span className="mx-3 text-gray-400 text-sm">or</span>
+                            <div className="flex-grow border-t border-gray-300"></div>
+                        </div> */}
+
+                    {/* Switch between login and signup */}
+                    {/* {mode === "login" ? (
+                            <p className="text-gray-600 text-sm">
+                                Don’t have an account?{" "}
+                                <span
+                                    onClick={() => setMode("signup")}
+                                    className="text-blue-600 font-semibold cursor-pointer hover:underline"
+                                >
+                                    Sign up
+                                </span>
+                            </p>
+                        ) : (
+                            <p className="text-gray-600 text-sm">
+                                Already have an account?{" "}
+                                <span
+                                    onClick={() => setMode("login")}
+                                    className="text-blue-600 font-semibold cursor-pointer hover:underline"
+                                >
+                                    Log in
+                                </span>
+                            </p>
+                        )} */}
                 </div>
+
                 <div className={styles.right}>
                     <Image src={img} alt='login'></Image>
                 </div>

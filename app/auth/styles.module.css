@@ -35,6 +35,9 @@
 .left{
     padding: 50px;
     width: 50%;
+    background-image: url(../../public/liquid-cheese.svg);
+    background-repeat: no-repeat;
+    background-size: cover;
 }
 
 

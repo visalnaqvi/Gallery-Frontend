@@ -3,7 +3,11 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 import { Pool } from "pg";
-
+interface GoogleProfile {
+  email: string
+  given_name?: string
+  family_name?: string
+}
 const pool = new Pool({
   connectionString: process.env.DATABASE!,
 });
@@ -22,20 +26,21 @@ async function getUserByEmail(email: string) {
   }
 }
 
-async function createUserWithGoogle(email: string) {
+async function createUserWithGoogle(email: string, firstName: string, lastName: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, NULL)
-       RETURNING id, email`,
-      [email]
+      `INSERT INTO users (email, password_hash, first_name, last_name)
+       VALUES ($1, 'google_signing', $2, $3)
+       RETURNING id, email, first_name, last_name`,
+      [email, firstName, lastName]
     );
     return result.rows[0];
   } finally {
     client.release();
   }
 }
+
 
 async function updateGoogleTokens(
   userId: string,
@@ -108,9 +113,13 @@ export const authOptions: NextAuthOptions = {
       let dbUser
       if (account?.provider === "google" && profile?.email) {
         dbUser = await getUserByEmail(profile.email);
-
+        const googleProfile = profile as unknown as GoogleProfile;
         if (!dbUser) {
-          dbUser = await createUserWithGoogle(profile.email);
+         dbUser = await createUserWithGoogle(
+        profile.email,
+        googleProfile.given_name || "",
+        googleProfile.family_name || ""
+      );
         }
 
         // Update tokens in DB
