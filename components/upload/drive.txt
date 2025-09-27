@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Folder, X, Upload, Clock, ImageIcon, ChevronRight, ArrowLeft, Search, RefreshCw } from 'lucide-react';
+import { Folder, X, Upload, Clock, ImageIcon, ChevronRight, ArrowLeft, Search, RefreshCw, Copy, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useSession } from "next-auth/react";
 
 interface DriveFile {
@@ -46,7 +46,7 @@ const formatFileSize = (bytes: number): string => {
 
 export default function DriveImport({ groupId, userId, onImportStart, onImportComplete }: DriveImportProps) {
     const [folders, setFolders] = useState<DriveFolder[]>([]);
-    const [selectedFolder, setSelectedFolder] = useState<DriveFolder | null>(null);
+    const [selectedFolders, setSelectedFolders] = useState<DriveFolder[]>([]);
     const [selectedFolderImages, setSelectedFolderImages] = useState<DriveFile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
@@ -57,6 +57,11 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     const { data: session } = useSession();
     const [count, setCount] = useState<number>(0);
     const [checkCountLoading, setCheckCountLoading] = useState(false);
+    const [importingFolderIds, setImportingFolderIds] = useState<string[]>([]);
+    const [showInstructions, setShowInstructions] = useState(false);
+    const [copySuccess, setCopySuccess] = useState(false);
+
+    const serviceAccountEmail = "snapper@buttons-2dc4a.iam.gserviceaccount.com";
 
     async function fetchCount() {
         try {
@@ -70,6 +75,9 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
             const data = await res.json();
             if (res.ok) {
                 setCount(data.count);
+                // Extract folder IDs from the importing groups
+                const folderIds = data.importingGroups?.map((group: any) => group.folderId) || [];
+                setImportingFolderIds(folderIds);
             } else {
                 console.error("Error:", data.error);
             }
@@ -79,6 +87,16 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
             setCheckCountLoading(false);
         }
     }
+
+    const copyToClipboard = async () => {
+        try {
+            await navigator.clipboard.writeText(serviceAccountEmail);
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy: ', err);
+        }
+    };
 
     const fetchFolders = async (parentId: string = 'root') => {
         if (!session?.user?.email) {
@@ -124,13 +142,18 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                             fetch(`/api/drive-service?action=get-folder-contents&folderId=${folder.id}&type=folders`)
                         ]);
 
-                        const imageData = imageResponse.ok ? await imageResponse.json() : { files: [] };
+                        const imageData = imageResponse.ok ? await imageResponse.json() : { files: { count: 0, hasMore: false } };
                         const subfolderData = subfolderResponse.ok ? await subfolderResponse.json() : { files: [] };
+
+                        // Handle the new count-only response format for images
+                        const imageCount = imageData.files?.count || 0;
+                        const hasMoreImages = imageData.files?.hasMore || false;
 
                         return {
                             id: folder.id,
                             name: folder.name,
-                            imageCount: imageData.files?.length || 0,
+                            imageCount: imageCount,
+                            imageCountTruncated: hasMoreImages ? `${imageCount}+` : undefined,
                             hasSubfolders: subfolderData.files?.length > 0,
                             parents: folder.parents
                         };
@@ -156,6 +179,10 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
 
     const refreshFolders = async () => {
         setIsRefreshing(true);
+        // Clear selected folders on refresh
+        setSelectedFolders([]);
+        setSelectedFolderImages([]);
+
         try {
             const response = await fetch('/api/drive-service', {
                 method: 'POST',
@@ -180,6 +207,8 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
 
             setFolders(sortedFolders);
             setError(null);
+            // Refresh importing folder IDs
+            await fetchCount();
         } catch (error) {
             console.error('Error refreshing folders:', error);
             setError(error instanceof Error ? error.message : 'Failed to refresh folders');
@@ -212,14 +241,17 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
         if (folder.hasSubfolders) {
             // Navigate into the folder
             setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name }]);
-            setSelectedFolder(null);
-            setSelectedFolderImages([]);
             await fetchFolders(folder.id);
         } else if (folder.imageCount > 0) {
-            // Select this folder
-            setSelectedFolder(folder);
-            // Optionally fetch images for preview
-            // await fetchFolderImages(folder.id);
+            // Toggle selection of this folder
+            setSelectedFolders(prev => {
+                const isSelected = prev.some(f => f.id === folder.id);
+                if (isSelected) {
+                    return prev.filter(f => f.id !== folder.id);
+                } else {
+                    return [...prev, folder];
+                }
+            });
         }
     };
 
@@ -227,49 +259,61 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
         if (currentPath.length > 1) {
             const newPath = currentPath.slice(0, -1);
             setCurrentPath(newPath);
-            setSelectedFolder(null);
             setSelectedFolderImages([]);
             const parentId = newPath[newPath.length - 1].id;
             fetchFolders(parentId === 'root' ? 'root' : parentId);
         }
     };
 
+    const removeSelectedFolder = (folderId: string) => {
+        setSelectedFolders(prev => prev.filter(f => f.id !== folderId));
+    };
+
+    const clearAllSelections = () => {
+        setSelectedFolders([]);
+        setSelectedFolderImages([]);
+    };
+
     const handleImport = async () => {
-        if (!selectedFolder || !groupId) return;
+        if (selectedFolders.length === 0 || !groupId) return;
 
         setIsImporting(true);
         onImportStart();
 
         try {
-            // Update group status
-            const res = await fetch('/api/groups', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId }),
-            });
+            // Import all selected folders
+            for (const folder of selectedFolders) {
+                // Update group status
+                const res = await fetch('/api/groups', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId }),
+                });
 
-            if (!res.ok) {
-                throw new Error('Failed to update group status');
-            }
+                if (!res.ok) {
+                    throw new Error('Failed to update group status');
+                }
 
-            // Save folder for processing
-            const saveResponse = await fetch("/api/save-drive-folder", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    folderId: selectedFolder.id,
-                    groupId,
-                    userId,
-                }),
-            });
+                // Save folder for processing
+                const saveResponse = await fetch("/api/save-drive-folder", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        folderId: folder.id,
+                        groupId,
+                        userId,
+                    }),
+                });
 
-            if (!saveResponse.ok) {
-                throw new Error('Failed to save Drive folder information');
+                if (!saveResponse.ok) {
+                    throw new Error(`Failed to save Drive folder information for "${folder.name}"`);
+                }
             }
 
             await fetchCount();
-            alert(`Successfully set up import for "${selectedFolder.name}" with ${selectedFolder.imageCount} images. Processing will begin shortly.`);
-            setSelectedFolder(null);
+            const totalImages = selectedFolders.reduce((sum, folder) => sum + folder.imageCount, 0);
+            alert(`Successfully set up import for ${selectedFolders.length} folders with ${totalImages} total images. Processing will begin shortly.`);
+            setSelectedFolders([]);
             setSelectedFolderImages([]);
             onImportComplete();
         } catch (error) {
@@ -294,8 +338,65 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
         folder.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const totalSelectedImages = selectedFolders.reduce((sum, folder) => sum + folder.imageCount, 0);
+
     return (
         <div className="bg-white border rounded-lg p-6 shadow-sm">
+            {/* User Email and Service Account Info */}
+            {session?.user?.email && (
+                <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+                    <div className="space-y-3">
+                        <div>
+                            <p className="text-sm text-gray-600">Logged in as:</p>
+                            <p className="font-medium text-gray-900">{session.user.email}</p>
+                        </div>
+
+                        <div>
+                            <p className="text-sm text-gray-600">Service Account Email (share folders with this email):</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono flex-1">
+                                    {serviceAccountEmail}
+                                </code>
+                                <button
+                                    onClick={copyToClipboard}
+                                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                                    title="Copy to clipboard"
+                                >
+                                    {copySuccess ? (
+                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                        <Copy className="h-4 w-4" />
+                                    )}
+                                    {copySuccess ? 'Copied!' : 'Copy'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowInstructions(!showInstructions)}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                            {showInstructions ? 'Hide Instructions' : 'Show Setup Instructions'}
+                        </button>
+
+                        {showInstructions && (
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
+                                <h4 className="font-medium text-blue-900 mb-2">Setup Instructions:</h4>
+                                <ol className="list-decimal list-inside space-y-1 text-blue-700">
+                                    <li>Copy the service account email above</li>
+                                    <li>Go to your Google Drive and right-click on the folder you want to share</li>
+                                    <li>Select "Share" from the context menu</li>
+                                    <li>Paste the service account email and give it "Viewer" permissions</li>
+                                    <li>Click "Send" to share the folder</li>
+                                    <li>Come back here and click the "Refresh" button</li>
+                                    <li>Your shared folder should now appear in the list below</li>
+                                </ol>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {checkCountLoading ? (
                 <div className='w-full bg-blue-100 p-2 rounded mb-4'>
                     <p className="font-bold text-blue-600">Loading Importing Groups</p>
@@ -342,73 +443,143 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                 </div>
             )}
 
-            {!selectedFolder ? (
-                <div className="space-y-4">
-                    {/* Navigation Path */}
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                        {currentPath.length > 1 && (
-                            <button
-                                onClick={navigateBack}
-                                className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                                Back
-                            </button>
-                        )}
-                        <div className="flex items-center gap-2">
-                            {currentPath.map((path, index) => (
-                                <React.Fragment key={path.id}>
-                                    {index > 0 && <ChevronRight className="h-4 w-4" />}
-                                    <span className={index === currentPath.length - 1 ? 'font-medium' : ''}>
-                                        {path.name}
+            {/* Selected Folders Summary */}
+            {selectedFolders.length > 0 && (
+                <div className="mb-4 p-4 border rounded-lg bg-green-50 border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-green-900">
+                            Selected Folders ({selectedFolders.length}) - Total Images: {totalSelectedImages}
+                        </h4>
+                        <button
+                            onClick={clearAllSelections}
+                            className="text-green-600 hover:text-green-800 text-sm"
+                        >
+                            Clear All
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {selectedFolders.map((folder) => (
+                            <div key={folder.id} className="flex items-center justify-between bg-white p-2 rounded border">
+                                <div className="flex items-center gap-2">
+                                    <Folder className="h-4 w-4 text-green-600" />
+                                    <span className="font-medium">{folder.name}</span>
+                                    <span className="text-sm text-gray-500">
+                                        ({folder.imageCountTruncated || folder.imageCount} images)
                                     </span>
-                                </React.Fragment>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Search */}
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search folders..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    </div>
-
-                    {/* Folders List */}
-                    {isLoading ? (
-                        <div className="text-center py-8">
-                            <Clock className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
-                            <p className="text-gray-600">Loading folders...</p>
-                        </div>
-                    ) : (
-                        <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
-                            {filteredFolders.length === 0 ? (
-                                <div className="p-4 text-center text-gray-500">
-                                    No shared folders found. Make sure folders are shared with your email address.
                                 </div>
+                                <button
+                                    onClick={() => removeSelectedFolder(folder.id)}
+                                    className="text-red-600 hover:text-red-800"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-4 flex gap-3">
+                        <button
+                            onClick={handleImport}
+                            disabled={isImporting || selectedFolders.length === 0}
+                            className="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                            {isImporting ? (
+                                <>
+                                    <Clock className="h-4 w-4 animate-spin" />
+                                    Setting up import...
+                                </>
                             ) : (
-                                filteredFolders.map((folder) => (
+                                <>
+                                    <Upload className="h-4 w-4" />
+                                    Import {selectedFolders.length} Folders ({totalSelectedImages} Images)
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className="space-y-4">
+                {/* Navigation Path */}
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                    {currentPath.length > 1 && (
+                        <button
+                            onClick={navigateBack}
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                            Back
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                        {currentPath.map((path, index) => (
+                            <React.Fragment key={path.id}>
+                                {index > 0 && <ChevronRight className="h-4 w-4" />}
+                                <span className={index === currentPath.length - 1 ? 'font-medium' : ''}>
+                                    {path.name}
+                                </span>
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Search */}
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search folders..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                </div>
+
+                {/* Folders List */}
+                {isLoading ? (
+                    <div className="text-center py-8">
+                        <Clock className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+                        <p className="text-gray-600">Loading folders...</p>
+                    </div>
+                ) : (
+                    <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                        {filteredFolders.length === 0 ? (
+                            <div className="p-4 text-center text-gray-500">
+                                No shared folders found. Make sure folders are shared with the service account email above.
+                            </div>
+                        ) : (
+                            filteredFolders.map((folder) => {
+                                const isSelected = selectedFolders.some(f => f.id === folder.id);
+                                const isImporting = importingFolderIds.includes(folder.id);
+
+                                return (
                                     <div
                                         key={folder.id}
                                         onClick={() => handleFolderClick(folder)}
                                         className={`flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer ${folder.imageCount === 0 && !folder.hasSubfolders
                                             ? 'opacity-50 cursor-not-allowed'
                                             : ''
-                                            }`}
+                                            } ${isSelected ? 'bg-green-50 border-green-200' : ''}`}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <Folder className="h-5 w-5 text-blue-600" />
+                                            <Folder className={`h-5 w-5 ${isSelected ? 'text-green-600' : 'text-blue-600'}`} />
                                             <div>
-                                                <p className="font-medium text-gray-900">{folder.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-gray-900">{folder.name}</p>
+                                                    {isImporting && (
+                                                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">
+                                                            Importing
+                                                        </span>
+                                                    )}
+                                                    {isSelected && (
+                                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                                                            Selected
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-sm text-gray-500">
                                                     {folder.imageCount > 0 && (
                                                         <span className="text-green-600 font-medium">
-                                                            {folder.imageCount} images
+                                                            {folder.imageCountTruncated || folder.imageCount} images
                                                         </span>
                                                     )}
                                                     {folder.imageCount === 0 && folder.hasSubfolders && (
@@ -421,85 +592,39 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            {isImporting && (
+                                                <button
+                                                    className="text-orange-600 hover:text-orange-800 text-sm font-medium px-2 py-1 border border-orange-300 rounded"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // TODO: Implement cancel import functionality
+                                                        console.log('Cancel import for folder:', folder.id);
+                                                    }}
+                                                >
+                                                    Cancel Import
+                                                </button>
+                                            )}
                                             {folder.hasSubfolders && (
                                                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
                                                     Has subfolders
                                                 </span>
                                             )}
-                                            {folder.imageCount > 0 && !folder.hasSubfolders && (
-                                                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                                                    Select
-                                                </button>
+                                            {folder.imageCount > 0 && !folder.hasSubfolders && !isImporting && (
+                                                <span className={`text-sm font-medium ${isSelected ? 'text-green-600' : 'text-blue-600'}`}>
+                                                    {isSelected ? 'Selected' : 'Click to Select'}
+                                                </span>
                                             )}
                                             {folder.hasSubfolders && (
                                                 <ChevronRight className="h-4 w-4 text-gray-400" />
                                             )}
                                         </div>
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                /* Selected Folder View */
-                <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h4 className="font-medium text-blue-900 flex items-center gap-2">
-                                    <Folder className="h-4 w-4" />
-                                    {selectedFolder.name}
-                                </h4>
-                                <p className="text-sm text-blue-700 mt-1">
-                                    {selectedFolder.imageCount} images found
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setSelectedFolder(null);
-                                    setSelectedFolderImages([]);
-                                }}
-                                className="text-blue-600 hover:text-blue-800"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
+                                );
+                            })
+                        )}
                     </div>
-
-                    {/* Import Button */}
-                    <div className="flex gap-3">
-                        <button
-                            onClick={handleImport}
-                            disabled={isImporting || selectedFolder.imageCount === 0}
-                            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                            {isImporting ? (
-                                <>
-                                    <Clock className="h-4 w-4 animate-spin" />
-                                    Setting up import...
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="h-4 w-4" />
-                                    Import {selectedFolder.imageCount} Images
-                                </>
-                            )}
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                setSelectedFolder(null);
-                                setSelectedFolderImages([]);
-                            }}
-                            className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-                            disabled={isImporting}
-                        >
-                            Choose Different Folder
-                        </button>
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

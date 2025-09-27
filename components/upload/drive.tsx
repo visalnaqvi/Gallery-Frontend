@@ -36,6 +36,14 @@ interface DriveImportProps {
     onImportComplete: () => void;
 }
 
+// Cache interface
+interface FolderCache {
+    [key: string]: {
+        folders: DriveFolder[];
+        timestamp: number;
+    };
+}
+
 const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -61,6 +69,9 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     const [showInstructions, setShowInstructions] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
 
+    // Cache for folder data
+    const [folderCache, setFolderCache] = useState<FolderCache>({});
+
     const serviceAccountEmail = "snapper@buttons-2dc4a.iam.gserviceaccount.com";
 
     async function fetchCount() {
@@ -75,9 +86,8 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
             const data = await res.json();
             if (res.ok) {
                 setCount(data.count);
-                // Extract folder IDs from the importing groups
-                const folderIds = data.importingGroups?.map((group: any) => group.folderId) || [];
-                setImportingFolderIds(folderIds);
+                // Use folderIds from the updated API response
+                setImportingFolderIds(data.folderIds || []);
             } else {
                 console.error("Error:", data.error);
             }
@@ -104,6 +114,15 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
             return;
         }
 
+        // Check cache first
+        const cacheKey = parentId;
+        const cachedData = folderCache[cacheKey];
+
+        if (cachedData && Date.now() - cachedData.timestamp < 5 * 60 * 1000) { // 5 minutes cache
+            setFolders(cachedData.folders);
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
@@ -123,15 +142,16 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
 
             const data = await response.json();
 
+            let processedFolders: DriveFolder[];
+
             if (parentId === 'root') {
                 // Sort folders by image count (descending) then by name
-                const sortedFolders = data.folders.sort((a: DriveFolder, b: DriveFolder) => {
+                processedFolders = data.folders.sort((a: DriveFolder, b: DriveFolder) => {
                     if (a.imageCount !== b.imageCount) {
                         return b.imageCount - a.imageCount;
                     }
                     return a.name.localeCompare(b.name);
                 });
-                setFolders(sortedFolders);
             } else {
                 // For subfolders, we need to process them differently
                 const subfolders = await Promise.all(
@@ -142,12 +162,12 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                             fetch(`/api/drive-service?action=get-folder-contents&folderId=${folder.id}&type=folders`)
                         ]);
 
-                        const imageData = imageResponse.ok ? await imageResponse.json() : { files: [] };
+                        const imageData = imageResponse.ok ? await imageResponse.json() : { files: { count: 0, hasMore: false } };
                         const subfolderData = subfolderResponse.ok ? await subfolderResponse.json() : { files: [] };
 
-                        // Count images with pagination awareness
-                        const imageCount = Math.min(imageData.files?.length || 0, 1000);
-                        const hasMoreImages = (imageData.files?.length || 0) >= 1000;
+                        // Handle the new count-only response format for images
+                        const imageCount = imageData.files?.count || 0;
+                        const hasMoreImages = imageData.files?.hasMore || false;
 
                         return {
                             id: folder.id,
@@ -160,15 +180,25 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                     })
                 );
 
-                const sortedSubfolders = subfolders.sort((a, b) => {
+                processedFolders = subfolders.sort((a, b) => {
                     if (a.imageCount !== b.imageCount) {
                         return b.imageCount - a.imageCount;
                     }
                     return a.name.localeCompare(b.name);
                 });
-
-                setFolders(sortedSubfolders);
             }
+
+            setFolders(processedFolders);
+
+            // Cache the result
+            setFolderCache(prev => ({
+                ...prev,
+                [cacheKey]: {
+                    folders: processedFolders,
+                    timestamp: Date.now()
+                }
+            }));
+
         } catch (error) {
             console.error('Error fetching folders:', error);
             setError(error instanceof Error ? error.message : 'Failed to fetch folders');
@@ -179,6 +209,10 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
 
     const refreshFolders = async () => {
         setIsRefreshing(true);
+
+        // Clear cache on refresh
+        setFolderCache({});
+
         // Clear selected folders on refresh
         setSelectedFolders([]);
         setSelectedFolderImages([]);
@@ -206,6 +240,15 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
             });
 
             setFolders(sortedFolders);
+
+            // Cache the refreshed root data
+            setFolderCache({
+                'root': {
+                    folders: sortedFolders,
+                    timestamp: Date.now()
+                }
+            });
+
             setError(null);
             // Refresh importing folder IDs
             await fetchCount();
@@ -238,6 +281,11 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     };
 
     const handleFolderClick = async (folder: DriveFolder) => {
+        // Check if folder is being imported - prevent selection
+        if (importingFolderIds.includes(folder.id)) {
+            return;
+        }
+
         if (folder.hasSubfolders) {
             // Navigate into the folder
             setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name }]);
@@ -281,33 +329,30 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
         onImportStart();
 
         try {
-            // Import all selected folders
-            for (const folder of selectedFolders) {
-                // Update group status
-                const res = await fetch('/api/groups', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ groupId }),
-                });
+            // Update group status
+            const res = await fetch('/api/groups', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId }),
+            });
 
-                if (!res.ok) {
-                    throw new Error('Failed to update group status');
-                }
+            if (!res.ok) {
+                throw new Error('Failed to update group status');
+            }
 
-                // Save folder for processing
-                const saveResponse = await fetch("/api/save-drive-folder", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        folderIds: [folder.id],
-                        groupId,
-                        userId,
-                    }),
-                });
+            // Send all selected folders in a single API call
+            const saveResponse = await fetch("/api/save-drive-folder", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    folderIds: selectedFolders.map(folder => (folder.id)),
+                    groupId,
+                    userId,
+                }),
+            });
 
-                if (!saveResponse.ok) {
-                    throw new Error(`Failed to save Drive folder information for "${folder.name}"`);
-                }
+            if (!saveResponse.ok) {
+                throw new Error(`Failed to save Drive folder information`);
             }
 
             await fetchCount();
@@ -555,22 +600,23 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                                     <div
                                         key={folder.id}
                                         onClick={() => handleFolderClick(folder)}
-                                        className={`flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer ${folder.imageCount === 0 && !folder.hasSubfolders
+                                        className={`flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-gray-50 ${(folder.imageCount === 0 && !folder.hasSubfolders) || isImporting
                                             ? 'opacity-50 cursor-not-allowed'
-                                            : ''
-                                            } ${isSelected ? 'bg-green-50 border-green-200' : ''}`}
+                                            : 'cursor-pointer'
+                                            } ${isSelected ? 'bg-green-50 border-green-200' : ''} ${isImporting ? 'bg-orange-50 border-orange-200' : ''}`}
                                     >
                                         <div className="flex items-center gap-3">
-                                            <Folder className={`h-5 w-5 ${isSelected ? 'text-green-600' : 'text-blue-600'}`} />
+                                            <Folder className={`h-5 w-5 ${isSelected ? 'text-green-600' : isImporting ? 'text-orange-600' : 'text-blue-600'}`} />
                                             <div>
                                                 <div className="flex items-center gap-2">
                                                     <p className="font-medium text-gray-900">{folder.name}</p>
                                                     {isImporting && (
-                                                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">
-                                                            Importing
+                                                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                                                            <Clock className="h-3 w-3 animate-spin" />
+                                                            Processing
                                                         </span>
                                                     )}
-                                                    {isSelected && (
+                                                    {isSelected && !isImporting && (
                                                         <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
                                                             Selected
                                                         </span>
@@ -578,7 +624,7 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                                                 </div>
                                                 <p className="text-sm text-gray-500">
                                                     {folder.imageCount > 0 && (
-                                                        <span className="text-green-600 font-medium">
+                                                        <span className={`font-medium ${isImporting ? 'text-orange-600' : 'text-green-600'}`}>
                                                             {folder.imageCountTruncated || folder.imageCount} images
                                                         </span>
                                                     )}
@@ -588,34 +634,27 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                                                     {folder.imageCount === 0 && !folder.hasSubfolders && (
                                                         <span className="text-gray-400">No images found</span>
                                                     )}
+                                                    {isImporting && (
+                                                        <span className="text-orange-600 text-xs ml-2">
+                                                            - Being imported, cannot select
+                                                        </span>
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {isImporting && (
-                                                <button
-                                                    className="text-orange-600 hover:text-orange-800 text-sm font-medium px-2 py-1 border border-orange-300 rounded"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        // TODO: Implement cancel import functionality
-                                                        console.log('Cancel import for folder:', folder.id);
-                                                    }}
-                                                >
-                                                    Cancel Import
-                                                </button>
-                                            )}
-                                            {folder.hasSubfolders && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                                    Has subfolders
-                                                </span>
+                                            {folder.hasSubfolders && !isImporting && (
+                                                <>
+                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                                        Has subfolders
+                                                    </span>
+                                                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                                                </>
                                             )}
                                             {folder.imageCount > 0 && !folder.hasSubfolders && !isImporting && (
                                                 <span className={`text-sm font-medium ${isSelected ? 'text-green-600' : 'text-blue-600'}`}>
                                                     {isSelected ? 'Selected' : 'Click to Select'}
                                                 </span>
-                                            )}
-                                            {folder.hasSubfolders && (
-                                                <ChevronRight className="h-4 w-4 text-gray-400" />
                                             )}
                                         </div>
                                     </div>

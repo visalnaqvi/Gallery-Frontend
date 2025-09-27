@@ -135,7 +135,7 @@ async function hasFolderSubfolders(drive: any, folderId: string) {
   }
 }
 
-async function getFolderContents(folderId: string, type: 'folders' | 'images'): Promise<any[]> {
+async function getFolderContents(folderId: string, type: 'folders' | 'images'): Promise<any> {
   const auth = getServiceAccountAuth();
   const drive = google.drive({ version: 'v3', auth });
 
@@ -143,57 +143,61 @@ async function getFolderContents(folderId: string, type: 'folders' | 'images'): 
   
   if (type === 'folders') {
     query += " and mimeType='application/vnd.google-apps.folder'";
-  } else if (type === 'images') {
-    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff'];
-    const mimeTypeQuery = imageTypes.map(type => `mimeType='${type}'`).join(' or ');
-    query += ` and (${mimeTypeQuery})`;
-  }
-
-  // For images, we need to handle pagination and the 1000+ limit
-  if (type === 'images') {
-    let allFiles: any[] = [];
-    let pageToken: string | null = null;
-    const maxFiles = 1000; // Limit to 1000 files for performance
-
-    do {
-      const response: any = await drive.files.list({
-        q: query,
-        fields: 'nextPageToken, files(id, name, mimeType, thumbnailLink, iconLink, size, parents)',
-        pageSize: 1000,
-        pageToken: pageToken || undefined,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-      });
-
-      const files = response.data.files || [];
-      allFiles = allFiles.concat(files);
-      
-      // Stop if we've reached our limit
-      if (allFiles.length >= maxFiles) {
-        allFiles = allFiles.slice(0, maxFiles);
-        break;
-      }
-      
-      pageToken = response.data.nextPageToken || null;
-      
-      // If we got less than the page size, we've reached the end
-      if (files.length < 1000) {
-        break;
-      }
-    } while (pageToken);
-
-    return allFiles;
-  } else {
-    // For folders, use the original single request
+    
+    // For folders, return full metadata since it's used in UI
     const response: any = await drive.files.list({
       q: query,
-      fields: 'files(id, name, mimeType, thumbnailLink, iconLink, size, parents)',
+      fields: 'files(id, name, mimeType, parents)',
       pageSize: 1000,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
 
     return response.data.files || [];
+    
+  } else if (type === 'images') {
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff'];
+    const mimeTypeQuery = imageTypes.map(type => `mimeType='${type}'`).join(' or ');
+    query += ` and (${mimeTypeQuery})`;
+
+    // For images, only count them - don't return metadata
+    let totalCount = 0;
+    let pageToken: string | null = null;
+    const maxCount = 1000; // Stop counting after 1000 for performance
+
+    do {
+      const response: any = await drive.files.list({
+        q: query,
+        fields: 'nextPageToken, files(id)', // Only get ID to count, no other metadata
+        pageSize: 1000,
+        pageToken: pageToken || undefined,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+
+      const fileCount = response.data.files?.length || 0;
+      totalCount += fileCount;
+      
+      // Stop if we've reached our limit
+      if (totalCount >= maxCount) {
+        return {
+          count: maxCount,
+          hasMore: true
+        };
+      }
+      
+      pageToken = response.data.nextPageToken || null;
+      
+      // If we got less than the page size, we've reached the end
+      if (fileCount < 1000) {
+        break;
+      }
+    } while (pageToken);
+
+    return {
+      count: totalCount,
+      hasMore: false
+    };
   }
 }
 
