@@ -1,0 +1,504 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Upload, Clock, X, Image as ImageIcon } from 'lucide-react';
+import { useSession, signIn } from "next-auth/react";
+
+interface DriveImportProps {
+    groupId: string | null;
+    userId: string;
+    onImportStart: () => void;
+    onImportComplete: () => void;
+}
+
+interface SelectedImage {
+    id: string;
+    name: string;
+    thumbnailLink?: string;
+}
+
+declare global {
+    interface Window {
+        google: any;
+        gapi: any;
+    }
+}
+
+export default function GooglePickerDriveImport({ groupId, userId, onImportStart, onImportComplete }: DriveImportProps) {
+    const [isPickerLoaded, setIsPickerLoaded] = useState(false);
+    const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+    const [isImporting, setIsImporting] = useState(false);
+    const [count, setCount] = useState<number>(0);
+    const [checkCountLoading, setCheckCountLoading] = useState(false);
+    const [authError, setAuthError] = useState(false);
+    const { data: session, update } = useSession();
+
+    // Google API configuration
+    const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+
+    useEffect(() => {
+        loadGoogleAPIs();
+        fetchCount();
+    }, [groupId]);
+
+    const fetchCount = async () => {
+        try {
+            setCheckCountLoading(true);
+            const res = await fetch("/api/get-importing-groups", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ groupId }),
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                setCount(data.count);
+            } else {
+                console.error("Error:", data.error);
+            }
+        } catch (err) {
+            console.error("Request failed:", err);
+        } finally {
+            setCheckCountLoading(false);
+        }
+    };
+
+    const loadGoogleAPIs = () => {
+        // Load Google API script
+        if (!window.gapi) {
+            const script = document.createElement('script');
+            script.src = 'https://apis.google.com/js/api.js';
+            script.onload = () => {
+                window.gapi.load('picker', initializePicker);
+            };
+            document.body.appendChild(script);
+        } else {
+            window.gapi.load('picker', initializePicker);
+        }
+    };
+
+    const initializePicker = () => {
+        setIsPickerLoaded(true);
+    };
+
+    const openPicker = async () => {
+        if (!window.google) {
+            alert("Google Picker not ready.");
+            return;
+        }
+
+        if (!session?.accessToken) {
+            alert("Please sign in with Google to access Drive.");
+            setAuthError(true);
+            return;
+        }
+
+        // Check if token has expired or will expire soon (within 5 minutes)
+        if (session.accessTokenExpires) {
+            const now = Math.floor(Date.now() / 1000);
+            const expiresIn = session.accessTokenExpires - now;
+
+            if (expiresIn <= 300) { // 5 minutes or less
+                console.log("Token expired or expiring soon, refreshing session...");
+                // Force a session update to refresh the token
+                await update();
+
+                // Wait a bit for the session to update
+                setTimeout(() => {
+                    openPicker();
+                }, 1000);
+                return;
+            }
+        }
+
+        // Check for refresh error
+        if (session.error === "RefreshAccessTokenError") {
+            console.log("Token refresh failed, requiring re-authentication");
+            setAuthError(true);
+            return;
+        }
+
+        setAuthError(false);
+
+        // Create multiple views to handle different Drive scenarios
+        const views = [];
+
+        // View 1: Standard Drive view for owned files
+        const driveView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false)
+            .setMimeTypes('image/jpeg,image/png,image/gif,image/bmp,image/webp,image/tiff')
+            .setMode(window.google.picker.DocsViewMode.LIST);
+
+        views.push(driveView);
+
+        // View 2: Shared with me view
+        const sharedView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false)
+            .setMimeTypes('image/jpeg,image/png,image/gif,image/bmp,image/webp,image/tiff')
+            .setMode(window.google.picker.DocsViewMode.LIST)
+            .setOwnedByMe(false); // Only shared files
+
+        views.push(sharedView);
+
+        // View 3: Photos view (Google Photos integration)
+        try {
+            const photosView = new window.google.picker.PhotosView()
+                .setType(window.google.picker.PhotosView.Type.UPLOADED);
+            views.push(photosView);
+        } catch (e) {
+            console.log('Photos view not available:', e);
+        }
+
+        const pickerBuilder = new window.google.picker.PickerBuilder()
+            .setAppId(GOOGLE_API_KEY!)
+            .setOAuthToken(session.accessToken)
+            .setDeveloperKey(GOOGLE_API_KEY)
+            .setCallback(enhancedPickerCallback)
+            .setTitle('Select images from Google Drive')
+            .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+            .enableFeature(window.google.picker.Feature.SUPPORT_DRIVES); // Support shared drives
+
+        // Add all views
+        views.forEach(view => pickerBuilder.addView(view));
+
+        const picker = pickerBuilder.build();
+        picker.setVisible(true);
+    };
+
+    const enhancedPickerCallback = (data: { action: string; docs: any; message: string | string[]; }) => {
+        console.log('🔍 Picker callback data:', data);
+
+        if (data.action === window.google.picker.Action.PICKED) {
+            const selectedItems = data.docs;
+            console.log('📋 Selected items:', selectedItems);
+
+            // Filter only image files and log detailed info
+            const imageFiles = selectedItems.filter((item: { id: any; name: any; mimeType: string; url: any; downloadUrl: any; embedUrl: any; iconUrl: any; thumbnailUrl: any; sizeBytes: any; lastEditedUtc: any; serviceId: any; type: any; parentId: any; isShared: any; rotation: any; }) => {
+                console.log('📄 Processing item:', {
+                    id: item.id,
+                    name: item.name,
+                    mimeType: item.mimeType,
+                    url: item.url,
+                    downloadUrl: item.downloadUrl,
+                    embedUrl: item.embedUrl,
+                    iconUrl: item.iconUrl,
+                    thumbnailUrl: item.thumbnailUrl,
+                    sizeBytes: item.sizeBytes,
+                    lastEditedUtc: item.lastEditedUtc,
+                    serviceId: item.serviceId,
+                    type: item.type,
+                    parentId: item.parentId,
+                    isShared: item.isShared,
+                    rotation: item.rotation
+                });
+
+                const isImage = item.mimeType && item.mimeType.startsWith('image/');
+                console.log(`📄 ${item.name}: ${isImage ? 'VALID IMAGE' : 'NOT AN IMAGE'} (${item.mimeType})`);
+                return isImage;
+            });
+
+            if (imageFiles.length > 0) {
+                const images = imageFiles.map((item: { id: any; name: any; thumbnailLink: any; thumbnailUrl: any; mimeType: any; sizeBytes: any; serviceId: any; parentId: any; isShared: any; downloadUrl: any; url: any; }) => {
+                    // Store more metadata that might be useful for debugging
+                    const imageData = {
+                        id: item.id,
+                        name: item.name,
+                        thumbnailLink: item.thumbnailLink || item.thumbnailUrl,
+                        mimeType: item.mimeType,
+                        sizeBytes: item.sizeBytes,
+                        serviceId: item.serviceId, // This can help identify the source
+                        parentId: item.parentId,
+                        isShared: item.isShared,
+                        downloadUrl: item.downloadUrl,
+                        url: item.url
+                    };
+
+                    console.log('💾 Storing image data:', imageData);
+                    return imageData;
+                });
+
+                setSelectedImages(images);
+                setAuthError(false);
+
+                // Log the final selection
+                console.log('✅ Final selected images:', images.map((img: { name: any; id: any; }) => `${img.name} (${img.id})`));
+            } else {
+                alert("Please select image files only.");
+                console.log('❌ No valid image files in selection');
+            }
+        } else if (data.action === window.google.picker.Action.CANCEL) {
+            console.log('🚫 User cancelled picker');
+        } else if (data.action === 'error') {
+            console.error('❌ Picker error:', data);
+            if (data.message && data.message.includes('401')) {
+                setAuthError(true);
+            }
+        }
+    };
+    const pickerCallback = (data: any) => {
+        if (data.action === window.google.picker.Action.PICKED) {
+            const selectedItems = data.docs;
+
+            // Filter only image files
+            const imageFiles = selectedItems.filter((item: any) =>
+                item.mimeType && item.mimeType.startsWith('image/')
+            );
+
+            if (imageFiles.length > 0) {
+                const images = imageFiles.map((item: any) => ({
+                    id: item.id,
+                    name: item.name,
+                    thumbnailLink: item.thumbnailLink
+                }));
+                setSelectedImages(images);
+                setAuthError(false);
+            } else {
+                alert("Please select image files only.");
+            }
+        } else if (data.action === window.google.picker.Action.CANCEL) {
+            // Handle cancel
+        } else if (data.action === 'error') {
+            // Handle authentication errors
+            if (data.message && data.message.includes('401')) {
+                setAuthError(true);
+            }
+        }
+    };
+
+    const handleImport = async () => {
+        if (!selectedImages.length || !groupId) return;
+
+        setIsImporting(true);
+        onImportStart();
+
+        try {
+            // Update group status
+            const res = await fetch('/api/groups', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId }),
+            });
+
+            if (!res.ok) {
+                throw new Error('Failed to update group status');
+            }
+
+            // Save images for processing
+            const imageIds = selectedImages.map(img => img.id);
+            const saveResponse = await fetch("/api/save-drive-folder", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    imageIds,
+                    groupId,
+                    userId,
+                }),
+            });
+
+            if (!saveResponse.ok) {
+                throw new Error('Failed to save Drive images information');
+            }
+
+            await fetchCount();
+
+            alert(`Successfully set up import for ${selectedImages.length} images. Processing will begin shortly.`);
+
+            setSelectedImages([]);
+            onImportComplete();
+
+        } catch (error) {
+            console.error('Error importing from Drive:', error);
+            alert('Failed to set up Drive import. Please try again.');
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const removeImage = (imageId: string) => {
+        setSelectedImages(prev => prev.filter(img => img.id !== imageId));
+    };
+
+    // Show sign-in button if there's an auth error
+    if (authError) {
+        return (
+            <div className="bg-white border rounded-lg p-6 shadow-sm">
+                <div className="text-center py-8">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                        <p className="text-red-700 mb-4">
+                            Your Google Drive access has expired. Please sign in again to continue.
+                        </p>
+                        <button
+                            onClick={() => signIn("google")}
+                            className="flex items-center justify-center gap-3 w-full max-w-sm px-6 py-3 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition mx-auto"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="24" height="24" viewBox="0 0 48 48">
+                                <path fill="#fbc02d" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12	s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24	s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                                <path fill="#e53935" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039	l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
+                                <path fill="#4caf50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36	c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path>
+                                <path fill="#1565c0" d="M43.611,20.083L43.595,20L42,20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571	c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path>
+                            </svg>
+                            <span className="text-gray-700 font-medium">Continue with Google</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+            {/* Status Banner */}
+            {checkCountLoading ? (
+                <div className='w-full bg-blue-100 p-2 rounded mb-4'>
+                    <p className="font-bold text-blue-600">Loading importing groups...</p>
+                </div>
+            ) : count > 0 && (
+                <div className='w-full bg-blue-100 p-2 rounded mb-4'>
+                    <p className="font-bold text-blue-600">
+                        Currently importing {count} images from your Google Drive. Images will be available in gallery shortly.
+                        Meanwhile you can select more images to import.
+                    </p>
+                </div>
+            )}
+
+            {/* Header */}
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="30" height="30" viewBox="0 0 48 48">
+                    <path fill="#1e88e5" d="M38.59,39c-0.535,0.93-0.298,1.68-1.195,2.197C36.498,41.715,35.465,42,34.39,42H13.61 c-1.074,0-2.106-0.285-3.004-0.802C9.708,40.681,9.945,39.93,9.41,39l7.67-9h13.84L38.59,39z"></path>
+                    <path fill="#fbc02d" d="M27.463,6.999c1.073-0.002,2.104-0.716,3.001-0.198c0.897,0.519,1.66,1.27,2.197,2.201l10.39,17.996 c0.537,0.93,0.807,1.967,0.808,3.002c0.001,1.037-1.267,2.073-1.806,3.001l-11.127-3.005l-6.924-11.993L27.463,6.999z"></path>
+                    <path fill="#e53935" d="M43.86,30c0,1.04-0.27,2.07-0.81,3l-3.67,6.35c-0.53,0.78-1.21,1.4-1.99,1.85L30.92,30H43.86z"></path>
+                    <path fill="#4caf50" d="M5.947,33.001c-0.538-0.928-1.806-1.964-1.806-3c0.001-1.036,0.27-2.073,0.808-3.004l10.39-17.996 c0.537-0.93,1.3-1.682,2.196-2.2c0.897-0.519,1.929,0.195,3.002,0.197l3.459,11.009l-6.922,11.989L5.947,33.001z"></path>
+                    <path fill="#1565c0" d="M17.08,30l-6.47,11.2c-0.78-0.45-1.46-1.07-1.99-1.85L4.95,33c-0.54-0.93-0.81-1.96-0.81-3H17.08z"></path>
+                    <path fill="#2e7d32" d="M30.46,6.8L24,18L17.53,6.8c0.78-0.45,1.66-0.73,2.6-0.79L27.46,6C28.54,6,29.57,6.28,30.46,6.8z"></path>
+                </svg>
+                Import from Google Drive
+            </h3>
+
+            {/* Main Content */}
+            {!selectedImages.length ? (
+                <div className="space-y-4">
+                    <div className="text-center py-8">
+                        <ImageIcon className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                        <p className="text-gray-600 mb-4">
+                            Select images from your Google Drive to import to your gallery
+                        </p>
+                        <button
+                            onClick={openPicker}
+                            disabled={!isPickerLoaded || !session?.accessToken}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed mx-auto"
+                        >
+                            {!isPickerLoaded ? (
+                                <>
+                                    <Clock className="h-5 w-5 animate-spin" />
+                                    Loading Google Picker...
+                                </>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="20" height="20" viewBox="0 0 48 48">
+                                        <path fill="#1e88e5" d="M38.59,39c-0.535,0.93-0.298,1.68-1.195,2.197C36.498,41.715,35.465,42,34.39,42H13.61 c-1.074,0-2.106-0.285-3.004-0.802C9.708,40.681,9.945,39.93,9.41,39l7.67-9h13.84L38.59,39z"></path>
+                                        <path fill="#fbc02d" d="M27.463,6.999c1.073-0.002,2.104-0.716,3.001-0.198c0.897,0.519,1.66,1.27,2.197,2.201l10.39,17.996 c0.537,0.93,0.807,1.967,0.808,3.002c0.001,1.037-1.267,2.073-1.806,3.001l-11.127-3.005l-6.924-11.993L27.463,6.999z"></path>
+                                        <path fill="#e53935" d="M43.86,30c0,1.04-0.27,2.07-0.81,3l-3.67,6.35c-0.53,0.78-1.21,1.4-1.99,1.85L30.92,30H43.86z"></path>
+                                        <path fill="#4caf50" d="M5.947,33.001c-0.538-0.928-1.806-1.964-1.806-3c0.001-1.036,0.27-2.073,0.808-3.004l10.39-17.996 c0.537-0.93,1.3-1.682,2.196-2.2c0.897-0.519,1.929,0.195,3.002,0.197l3.459,11.009l-6.922,11.989L5.947,33.001z"></path>
+                                        <path fill="#1565c0" d="M17.08,30l-6.47,11.2c-0.78-0.45-1.46-1.07-1.99-1.85L4.95,33c-0.54-0.93-0.81-1.96-0.81-3H17.08z"></path>
+                                        <path fill="#2e7d32" d="M30.46,6.8L24,18L17.53,6.8c0.78-0.45,1.66-0.73,2.6-0.79L27.46,6C28.54,6,29.57,6.28,30.46,6.8z"></path>
+                                    </svg>
+                                    Select Images from Drive
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-medium text-gray-900 mb-2">How it works:</h4>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                            <li>• Click "Select Images from Drive" to open Google Drive picker</li>
+                            <li>• Choose multiple images from your Drive (hold Ctrl/Cmd for multiple selection)</li>
+                            <li>• Only image files (JPG, PNG, GIF, etc.) can be selected</li>
+                            <li>• Selected images will be imported to your gallery</li>
+                            <li>• Processing happens in the background</li>
+                        </ul>
+                    </div>
+                </div>
+            ) : (
+                /* Images Selected */
+                <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 flex items-center gap-2 mb-3">
+                            <ImageIcon className="h-4 w-4" />
+                            {selectedImages.length} images selected for import
+                        </h4>
+
+                        {/* Selected Images Preview */}
+                        {/* <div className="max-h-40 overflow-y-auto">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                                {selectedImages.map((image) => (
+                                    <div key={image.id} className="relative group">
+                                        <div className="bg-white rounded border p-2 text-center">
+                                            {image.thumbnailLink ? (
+                                                <img
+                                                    src={image.thumbnailLink}
+                                                    alt={image.name}
+                                                    className="w-12 h-12 object-cover mx-auto rounded"
+                                                />
+                                            ) : (
+                                                <ImageIcon className="w-12 h-12 mx-auto text-gray-400" />
+                                            )}
+                                            <p className="text-xs text-gray-600 truncate mt-1" title={image.name}>
+                                                {image.name}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => removeImage(image.id)}
+                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div> */}
+                    </div>
+
+                    {/* Import Actions */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleImport}
+                            disabled={isImporting}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                            {isImporting ? (
+                                <>
+                                    <Clock className="h-4 w-4 animate-spin" />
+                                    Setting up import...
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="h-4 w-4" />
+                                    Import {selectedImages.length} Images
+                                </>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={() => setSelectedImages([])}
+                            className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                            disabled={isImporting}
+                        >
+                            Clear Selection
+                        </button>
+
+                        <button
+                            onClick={openPicker}
+                            className="flex items-center gap-2 border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50"
+                            disabled={isImporting}
+                        >
+                            Select More Images
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

@@ -3,11 +3,13 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 import { Pool } from "pg";
+
 interface GoogleProfile {
   email: string
   given_name?: string
   family_name?: string
 }
+
 const pool = new Pool({
   connectionString: process.env.DATABASE!,
 });
@@ -41,23 +43,56 @@ async function createUserWithGoogle(email: string, firstName: string, lastName: 
   }
 }
 
-
 async function updateGoogleTokens(
   userId: string,
   accessToken: string,
-  refreshToken?: string
+  refreshToken?: string,
+  expiresAt?: number
 ) {
   const client = await pool.connect();
   try {
     await client.query(
       `UPDATE users
        SET access_token = $1,
-           refresh_token = COALESCE($2, refresh_token)
+           refresh_token = COALESCE($2, refresh_token),
+           token_expires_at = $4
        WHERE id = $3`,
-      [accessToken, refreshToken ?? null, userId]
+      [accessToken, refreshToken ?? null, userId, expiresAt ? new Date(expiresAt * 1000) : null]
     );
   } finally {
     client.release();
+  }
+}
+
+async function refreshAccessToken(refreshToken: string) {
+  try {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+
+    const tokens = await response.json();
+
+    if (!response.ok) {
+      throw new Error(tokens.error_description || tokens.error);
+    }
+
+    return {
+      accessToken: tokens.access_token,
+      expiresAt: Math.floor(Date.now() / 1000) + tokens.expires_in,
+      refreshToken: tokens.refresh_token ?? refreshToken, // Google may not always return a new refresh token
+    };
+  } catch (error) {
+    console.error("Error refreshing access token:", error);
+    throw error;
   }
 }
 
@@ -93,7 +128,7 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope:
-            "openid email profile https://www.googleapis.com/auth/drive.file",
+            "openid email profile",
           access_type: "offline", // get refresh_token
           prompt: "consent", // force refresh_token on first login
         },
@@ -108,36 +143,79 @@ export const authOptions: NextAuthOptions = {
       // Always go to home page after login
       return baseUrl + "/";
     },
+    
     async jwt({ token, user, account, profile }) {
       // Case: First login with Google
-      let dbUser
+      let dbUser;
       if (account?.provider === "google" && profile?.email) {
         dbUser = await getUserByEmail(profile.email);
         const googleProfile = profile as unknown as GoogleProfile;
         if (!dbUser) {
-         dbUser = await createUserWithGoogle(
-        profile.email,
-        googleProfile.given_name || "",
-        googleProfile.family_name || ""
-      );
+          dbUser = await createUserWithGoogle(
+            profile.email,
+            googleProfile.given_name || "",
+            googleProfile.family_name || ""
+          );
         }
+
+        // Calculate expiry time (Google tokens typically expire in 3600 seconds)
+        const expiresAt = Math.floor(Date.now() / 1000) + (account.expires_at ? account.expires_at : 3600);
 
         // Update tokens in DB
         await updateGoogleTokens(
           dbUser.id,
           account.access_token!,
-          account.refresh_token
+          account.refresh_token,
+          expiresAt
         );
 
         token.id = dbUser.id;
         token.email = dbUser.email;
         token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
+        token.accessTokenExpires = expiresAt;
       }
-     
-      // Case: Credentials login
-      if (dbUser) {
-        token.id = (dbUser as any).id;
-        token.email = dbUser.email;
+
+      // // Case: Credentials login
+      // if (user) {
+      //   token.id = user.id;
+      //   token.email = user.email;
+      // }
+
+      // Check if we need to refresh the access token
+      if (token.accessToken && token.refreshToken && token.accessTokenExpires) {
+        // If token expires in the next 5 minutes, refresh it
+        const shouldRefresh = Math.floor(Date.now() / 1000) > (token.accessTokenExpires as number) - 300;
+        
+        if (shouldRefresh) {
+          try {
+            const refreshedTokens = await refreshAccessToken(token.refreshToken as string);
+            
+            // Update database with new tokens
+            if (token.id) {
+              await updateGoogleTokens(
+                token.id as string,
+                refreshedTokens.accessToken,
+                refreshedTokens.refreshToken,
+                refreshedTokens.expiresAt
+              );
+            }
+
+            return {
+              ...token,
+              accessToken: refreshedTokens.accessToken,
+              accessTokenExpires: refreshedTokens.expiresAt,
+              refreshToken: refreshedTokens.refreshToken,
+            };
+          } catch (error) {
+            console.error("Error refreshing token:", error);
+            // Return token as-is, but mark it as expired
+            return {
+              ...token,
+              error: "RefreshAccessTokenError",
+            };
+          }
+        }
       }
 
       return token;
@@ -148,6 +226,9 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.accessToken = token.accessToken;
+        session.refreshToken = token.refreshToken;
+        session.accessTokenExpires = token.accessTokenExpires;
+        session.error = token.error;
       }
       return session;
     },
