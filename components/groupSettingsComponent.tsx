@@ -169,6 +169,7 @@ export default function GroupSettingsComponent() {
             const data = await res.json();
             console.log("Delete scheduled:", data);
             alert("Group will be deleted in 24 hours.");
+            fetchData();
             setShowDeleteConfirm(false);
         } catch (err) {
             console.error("Error deleting Group:", err);

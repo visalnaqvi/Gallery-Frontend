@@ -181,7 +181,7 @@ export async function DELETE(req: NextRequest) {
       await client.query(
         `
         UPDATE images
-        SET delete_at = NOW() + interval '24 hours'
+        SET delete_at = NOW() - interval '24 hours'
         WHERE id = $1
         `,
         [imageId]

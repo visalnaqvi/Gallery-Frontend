@@ -68,7 +68,7 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     const [importingFolderIds, setImportingFolderIds] = useState<string[]>([]);
     const [showInstructions, setShowInstructions] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
-
+    const [stoppingImportIds, setStoppingImportIds] = useState<string[]>([]);
     // Cache for folder data
     const [folderCache, setFolderCache] = useState<FolderCache>({});
 
@@ -384,7 +384,39 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     );
 
     const totalSelectedImages = selectedFolders.reduce((sum, folder) => sum + folder.imageCount, 0);
+    const handleStopImport = async (folderId: string, folderName: string) => {
+        if (!groupId) return;
 
+        // Add folder ID to stopping list
+        setStoppingImportIds(prev => [...prev, folderId]);
+
+        try {
+            const response = await fetch("/api/save-drive-folder", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    folderIds: [folderId],
+                    groupId,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(`Successfully stopped import for folder "${folderName}"`);
+                // Refresh the importing folder IDs to update the UI
+                await fetchCount();
+            } else {
+                throw new Error(data.error || 'Failed to stop import');
+            }
+        } catch (error) {
+            console.error('Error stopping import:', error);
+            alert('Failed to stop import. Please try again.');
+        } finally {
+            // Remove folder ID from stopping list
+            setStoppingImportIds(prev => prev.filter(id => id !== folderId));
+        }
+    };
     return (
         <div className="bg-white border rounded-lg p-6 shadow-sm">
             {/* User Email and Service Account Info */}
@@ -643,6 +675,22 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            {isImporting && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleStopImport(folder.id, folder.name);
+                                                    }}
+                                                    disabled={stoppingImportIds.includes(folder.id)}
+                                                    className="text-orange-700 hover:text-orange-900 text-xs font-medium px-2 py-1 border border-orange-300 rounded bg-white hover:bg-orange-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                                    title={`Stop importing folder "${folder.name}"`}
+                                                >
+                                                    {stoppingImportIds.includes(folder.id) && (
+                                                        <Clock className="h-3 w-3 animate-spin" />
+                                                    )}
+                                                    {stoppingImportIds.includes(folder.id) ? 'Stopping...' : 'Stop Import'}
+                                                </button>
+                                            )}
                                             {folder.hasSubfolders && !isImporting && (
                                                 <>
                                                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">

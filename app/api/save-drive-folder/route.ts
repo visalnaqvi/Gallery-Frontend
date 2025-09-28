@@ -69,3 +69,50 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export async function DELETE(req: Request) {
+  const { folderIds, groupId } = await req.json();
+
+  if (!folderIds || !Array.isArray(folderIds) || folderIds.length === 0) {
+    return NextResponse.json({ error: "No folder IDs provided" }, { status: 400 });
+  }
+
+  if (!groupId) {
+    return NextResponse.json({ error: "Group ID is required" }, { status: 400 });
+  }
+
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Create placeholders for the folder IDs
+    const placeholders = folderIds.map((_, index) => `$${index + 2}`).join(', ');
+    
+    const deleteQuery = `
+      DELETE FROM drive_folders 
+      WHERE group_id = $1 AND folder_id IN (${placeholders})
+    `;
+
+    const params = [groupId, ...folderIds];
+    const result = await client.query(deleteQuery, params);
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({ 
+      success: true, 
+      message: `Successfully removed ${result.rowCount} folders from processing queue`,
+      deletedCount: result.rowCount
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Database error:', err);
+    return NextResponse.json(
+      { error: "Failed to remove folder IDs from processing queue" }, 
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}
