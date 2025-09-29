@@ -74,6 +74,17 @@ class UploadQueueManager {
         this.listeners.forEach(callback => callback(this.getState()));
     }
 
+    // Recalculate stats from actual queue state
+    private recalculateStats(): void {
+        this.stats.total = this.queue.length;
+        this.stats.completed = this.queue.filter(item => item.status === 'completed').length;
+        this.stats.failed = this.queue.filter(item => item.status === 'failed').length;
+        this.stats.totalSize = this.queue.reduce((sum, item) => sum + item.file.size, 0);
+        this.stats.uploadedSize = this.queue
+            .filter(item => item.status === 'completed')
+            .reduce((sum, item) => sum + item.file.size, 0);
+    }
+
     getState(): UploadState {
         return {
             queue: [...this.queue],
@@ -99,9 +110,7 @@ class UploadQueueManager {
         }));
 
         this.queue.push(...newItems);
-        this.stats.total += newItems.length;
-        this.stats.totalSize += newItems.reduce((sum, item) => sum + item.file.size, 0);
-
+        this.recalculateStats();
         this.notify();
 
         if (!this.isProcessing && !this.isPaused) {
@@ -161,7 +170,7 @@ class UploadQueueManager {
                     (error) => {
                         item.status = 'failed';
                         item.error = error.message;
-                        this.stats.failed++;
+                        this.recalculateStats();
                         reject(error);
                     },
                     async () => {
@@ -172,15 +181,13 @@ class UploadQueueManager {
                             item.uploadedAt = timestamp;
                             item.progress = 100;
                             item.location = downloadURL;
-                            this.stats.completed++;
-                            this.stats.uploadedSize += item.file.size;
-
+                            this.recalculateStats();
                             resolve();
                         } catch (error) {
                             console.error('Failed to get download URL:', error);
                             item.status = 'failed';
                             item.error = 'Failed to get download URL';
-                            this.stats.failed++;
+                            this.recalculateStats();
                             reject(error);
                         }
                     }
@@ -189,7 +196,7 @@ class UploadQueueManager {
         } catch (error) {
             item.status = 'failed';
             item.error = error instanceof Error ? error.message : 'Unknown error';
-            this.stats.failed++;
+            this.recalculateStats();
         }
 
         this.notify();
@@ -198,8 +205,17 @@ class UploadQueueManager {
     pause(): void {
         this.isPaused = true;
         if (this.currentUpload?.task) {
-            this.currentUpload.task.cancel();
+            try {
+                this.currentUpload.task.cancel();
+                // Reset current upload to pending state
+                this.currentUpload.status = 'pending';
+                this.currentUpload.progress = 0;
+                this.currentUpload.task = null;
+            } catch (err) {
+                console.error('Error cancelling task:', err);
+            }
         }
+        this.recalculateStats();
         this.notify();
     }
 
@@ -216,6 +232,7 @@ class UploadQueueManager {
             item.error = null;
             item.progress = 0;
             item.task = null;
+            this.recalculateStats();
             this.notify();
 
             if (!this.isProcessing && !this.isPaused) {
@@ -233,7 +250,7 @@ class UploadQueueManager {
                 item.task = null;
             }
         });
-        this.stats.failed = 0;
+        this.recalculateStats();
         this.notify();
 
         if (!this.isProcessing && !this.isPaused) {
@@ -242,6 +259,7 @@ class UploadQueueManager {
     }
 
     clear(): void {
+        // Cancel all active uploads
         this.queue.forEach(item => {
             if (item.task) {
                 try {
@@ -252,6 +270,7 @@ class UploadQueueManager {
             }
         });
 
+        // Complete reset - fresh start
         this.queue = [];
         this.currentUpload = null;
         this.isProcessing = false;
@@ -268,6 +287,7 @@ class UploadQueueManager {
 
     removeCompleted(): void {
         this.queue = this.queue.filter(item => item.status !== 'completed');
+        this.recalculateStats();
         this.notify();
     }
 }
@@ -295,6 +315,7 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [uploadState, setUploadState] = useState<UploadState>(uploadManager.getState());
     const [startTime, setStartTime] = useState<number | null>(null);
+    const [isInitializing, setIsInitializing] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -317,7 +338,7 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
 
         const validFiles = Array.from(files).filter((file) => {
             if (!file.type.startsWith('image/')) return false;
-            if (file.size > 50 * 1024 * 1024) { // 50MB limit
+            if (file.size > 50 * 1024 * 1024) {
                 alert(`File ${file.name} is too large. Maximum size is 50MB.`);
                 return false;
             }
@@ -364,6 +385,8 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
             return;
         }
 
+        setIsInitializing(true);
+
         try {
             const res = await fetch('/api/groups', {
                 method: 'PATCH',
@@ -375,17 +398,20 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                 const errorText = await res.text();
                 console.error('Failed to update group status:', errorText);
                 alert('Could not update group status.');
+                setIsInitializing(false);
                 return;
             }
             console.log('Group status updated to heating');
         } catch (error) {
             console.error('Error updating group status:', error);
             alert('Failed to update group status.');
+            setIsInitializing(false);
             return;
         }
 
         uploadManager.addFiles(selectedFiles, groupId, userId);
         setSelectedFiles([]);
+        setIsInitializing(false);
     }, [selectedFiles, groupId, userId]);
 
     const calculateETA = (): number | null => {
@@ -411,11 +437,13 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
         ? (uploadState.stats.completed / uploadState.stats.total) * 100
         : 0;
 
+    const pendingCount = uploadState.stats.total - uploadState.stats.completed - uploadState.stats.failed;
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6 p-2 sm:p-4">
             {/* File Selection Area */}
             <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+                className={`border-2 border-dashed rounded-lg p-4 sm:p-8 text-center transition-colors cursor-pointer
                     ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
                     ${uploadState.isProcessing ? 'opacity-50 pointer-events-none' : 'hover:border-gray-400'}
                 `}
@@ -434,17 +462,17 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                     disabled={uploadState.isProcessing}
                 />
 
-                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
+                <Upload className="mx-auto h-8 w-8 sm:h-12 sm:w-12 text-gray-400 mb-2 sm:mb-4" />
+                <p className="text-base sm:text-lg font-medium text-gray-900 mb-1 sm:mb-2">
                     Drop images here or click to select
                 </p>
-                <p className="text-sm text-gray-500">
-                    Supports JPG, PNG, GIF, WebP • Max 50MB per file • Select thousands of files
+                <p className="text-xs sm:text-sm text-gray-500 px-2">
+                    Supports JPG, PNG, GIF, WebP • Max 50MB per file
                 </p>
 
                 {selectedFiles.length > 0 && (
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm font-medium text-gray-700">
+                    <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs sm:text-sm font-medium text-gray-700">
                             {selectedFiles.length} files selected ({formatFileSize(selectedFiles.reduce((sum, f) => sum + f.size, 0))})
                         </p>
                     </div>
@@ -453,24 +481,35 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
 
             {/* Upload Controls */}
             {(selectedFiles.length > 0 || uploadState.stats.total > 0) && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-2 sm:gap-3">
                     {selectedFiles.length > 0 && (
                         <button
                             onClick={startUpload}
-                            disabled={uploadState.isProcessing}
-                            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            disabled={uploadState.isProcessing || isInitializing}
+                            className="flex items-center gap-1 sm:gap-2 bg-blue-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
                         >
-                            <Play className="h-4 w-4" />
-                            Upload {selectedFiles.length} Images
+                            {isInitializing ? (
+                                <>
+                                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                                    <span className="hidden sm:inline">Initializing...</span>
+                                    <span className="sm:hidden">Loading...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <span className="hidden sm:inline">Upload {selectedFiles.length} Images</span>
+                                    <span className="sm:hidden">Upload ({selectedFiles.length})</span>
+                                </>
+                            )}
                         </button>
                     )}
 
                     {uploadState.isProcessing && (
                         <button
                             onClick={() => uploadManager.pause()}
-                            className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
+                            className="flex items-center gap-1 sm:gap-2 bg-orange-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-orange-700 text-sm sm:text-base"
                         >
-                            <Pause className="h-4 w-4" />
+                            <Pause className="h-3 w-3 sm:h-4 sm:w-4" />
                             Pause
                         </button>
                     )}
@@ -478,9 +517,9 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                     {uploadState.isPaused && (
                         <button
                             onClick={() => uploadManager.resume()}
-                            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                            className="flex items-center gap-1 sm:gap-2 bg-green-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-green-700 text-sm sm:text-base"
                         >
-                            <Play className="h-4 w-4" />
+                            <Play className="h-3 w-3 sm:h-4 sm:w-4" />
                             Resume
                         </button>
                     )}
@@ -488,10 +527,11 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                     {uploadState.stats.failed > 0 && (
                         <button
                             onClick={() => uploadManager.retryFailed()}
-                            className="flex items-center gap-2 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700"
+                            className="flex items-center gap-1 sm:gap-2 bg-yellow-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-yellow-700 text-sm sm:text-base"
                         >
-                            <RotateCcw className="h-4 w-4" />
-                            Retry Failed ({uploadState.stats.failed})
+                            <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Retry Failed ({uploadState.stats.failed})</span>
+                            <span className="sm:hidden">Retry ({uploadState.stats.failed})</span>
                         </button>
                     )}
 
@@ -499,16 +539,17 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                         <>
                             <button
                                 onClick={() => uploadManager.removeCompleted()}
-                                className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                                className="flex items-center gap-1 sm:gap-2 bg-gray-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-gray-700 text-sm sm:text-base"
                             >
-                                Clear Completed
+                                <span className="hidden sm:inline">Clear Completed</span>
+                                <span className="sm:hidden">Clear Done</span>
                             </button>
 
                             <button
                                 onClick={() => uploadManager.clear()}
-                                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+                                className="flex items-center gap-1 sm:gap-2 bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-red-700 text-sm sm:text-base"
                             >
-                                <X className="h-4 w-4" />
+                                <X className="h-3 w-3 sm:h-4 sm:w-4" />
                                 Clear All
                             </button>
                         </>
@@ -518,25 +559,25 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
 
             {/* Upload Progress */}
             {uploadState.stats.total > 0 && (
-                <div className="bg-white border rounded-lg p-6 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Upload Progress</h3>
+                <div className="bg-white border rounded-lg p-3 sm:p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900">Upload Progress</h3>
                         {uploadState.isPaused && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                            <span className="px-2 py-0.5 sm:py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
                                 Paused
                             </span>
                         )}
                     </div>
 
                     {/* Overall Progress Bar */}
-                    <div className="space-y-2 mb-4">
-                        <div className="flex justify-between text-sm text-gray-600">
+                    <div className="space-y-2 mb-3 sm:mb-4">
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600">
                             <span>Overall Progress</span>
                             <span>{Math.round(overallProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div className="w-full bg-gray-200 rounded-full h-2 sm:h-3">
                             <div
-                                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                                className="bg-blue-600 h-2 sm:h-3 rounded-full transition-all duration-300"
                                 style={{ width: `${overallProgress}%` }}
                             />
                         </div>
@@ -544,16 +585,16 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
 
                     {/* Current File Progress */}
                     {uploadState.currentUpload && (
-                        <div className="space-y-2 mb-4 p-3 bg-blue-50 rounded-lg">
-                            <div className="flex justify-between text-sm">
-                                <span className="font-medium truncate max-w-xs">
+                        <div className="space-y-2 mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 rounded-lg">
+                            <div className="flex justify-between text-xs sm:text-sm gap-2">
+                                <span className="font-medium truncate">
                                     {uploadState.currentUpload.file.name}
                                 </span>
-                                <span>{Math.round(uploadState.currentUpload.progress)}%</span>
+                                <span className="flex-shrink-0">{Math.round(uploadState.currentUpload.progress)}%</span>
                             </div>
-                            <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div className="w-full bg-blue-200 rounded-full h-1.5 sm:h-2">
                                 <div
-                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all duration-300"
                                     style={{ width: `${uploadState.currentUpload.progress}%` }}
                                 />
                             </div>
@@ -561,28 +602,28 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                     )}
 
                     {/* Statistics */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-green-600">{uploadState.stats.completed}</div>
+                            <div className="text-xl sm:text-2xl font-bold text-green-600">{uploadState.stats.completed}</div>
                             <div className="text-gray-500">Completed</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-red-600">{uploadState.stats.failed}</div>
+                            <div className="text-xl sm:text-2xl font-bold text-red-600">{uploadState.stats.failed}</div>
                             <div className="text-gray-500">Failed</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">{uploadState.stats.total - uploadState.stats.completed - uploadState.stats.failed}</div>
+                            <div className="text-xl sm:text-2xl font-bold text-blue-600">{pendingCount}</div>
                             <div className="text-gray-500">Pending</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-gray-900">{uploadState.stats.total}</div>
+                            <div className="text-xl sm:text-2xl font-bold text-gray-900">{uploadState.stats.total}</div>
                             <div className="text-gray-500">Total</div>
                         </div>
                     </div>
 
                     {/* Speed and ETA */}
                     {(speed || eta) && (
-                        <div className="flex justify-between mt-4 pt-4 border-t text-sm text-gray-600">
+                        <div className="flex flex-col sm:flex-row justify-between gap-1 sm:gap-0 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t text-xs sm:text-sm text-gray-600">
                             {speed && (
                                 <span>Speed: {formatFileSize(speed)}/s</span>
                             )}
@@ -597,48 +638,48 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
             {/* Upload Queue */}
             {uploadState.queue.length > 0 && (
                 <div className="bg-white border rounded-lg shadow-sm">
-                    <div className="p-4 border-b">
-                        <h3 className="text-lg font-semibold text-gray-900">Upload Queue ({uploadState.queue.length})</h3>
+                    <div className="p-3 sm:p-4 border-b">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900">Upload Queue ({uploadState.queue.length})</h3>
                     </div>
 
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="max-h-64 sm:max-h-96 overflow-y-auto">
                         {uploadState.queue.slice(0, 50).map((item) => (
-                            <div key={item.id} className="flex items-center gap-3 p-3 border-b last:border-b-0 hover:bg-gray-50">
+                            <div key={item.id} className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 border-b last:border-b-0 hover:bg-gray-50">
                                 <div className="flex-shrink-0">
-                                    {item.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-500" />}
-                                    {item.status === 'failed' && <AlertCircle className="h-5 w-5 text-red-500" />}
-                                    {item.status === 'uploading' && <Clock className="h-5 w-5 text-blue-500 animate-spin" />}
-                                    {item.status === 'pending' && <FileImage className="h-5 w-5 text-gray-400" />}
+                                    {item.status === 'completed' && <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />}
+                                    {item.status === 'failed' && <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />}
+                                    {item.status === 'uploading' && <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 animate-spin" />}
+                                    {item.status === 'pending' && <FileImage className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />}
                                 </div>
 
                                 <div className="flex-grow min-w-0">
                                     <div className="flex justify-between items-center mb-1">
-                                        <p className="text-sm font-medium text-gray-900 truncate">
+                                        <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
                                             {item.file.name}
                                         </p>
-                                        <span className="text-xs text-gray-500 ml-2">
+                                        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
                                             {formatFileSize(item.file.size)}
                                         </span>
                                     </div>
 
                                     {item.status === 'uploading' && (
-                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                        <div className="w-full bg-gray-200 rounded-full h-1 sm:h-1.5">
                                             <div
-                                                className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                                                className="bg-blue-600 h-1 sm:h-1.5 rounded-full transition-all duration-300"
                                                 style={{ width: `${item.progress}%` }}
                                             />
                                         </div>
                                     )}
 
                                     {item.error && (
-                                        <p className="text-xs text-red-600 mt-1">{item.error}</p>
+                                        <p className="text-xs text-red-600 mt-1 truncate">{item.error}</p>
                                     )}
                                 </div>
 
                                 {item.status === 'failed' && (
                                     <button
                                         onClick={() => uploadManager.retry(item.id)}
-                                        className="flex-shrink-0 text-blue-600 hover:text-blue-800 text-sm"
+                                        className="flex-shrink-0 text-blue-600 hover:text-blue-800 text-xs sm:text-sm px-2"
                                     >
                                         Retry
                                     </button>
@@ -647,7 +688,7 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
                         ))}
 
                         {uploadState.queue.length > 50 && (
-                            <div className="p-3 text-center text-sm text-gray-500 bg-gray-50">
+                            <div className="p-2 sm:p-3 text-center text-xs sm:text-sm text-gray-500 bg-gray-50">
                                 ... and {uploadState.queue.length - 50} more files
                             </div>
                         )}
@@ -657,21 +698,21 @@ export default function FileUpload({ groupId, userId, onUploadStart, onUploadCom
 
             {/* Status Indicator for Background Uploads */}
             {uploadState.isProcessing && (
-                <div className="fixed bottom-4 right-4 bg-white border-2 border-blue-500 rounded-lg p-4 shadow-lg z-50">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4 text-blue-600 animate-spin" />
-                        <span className="text-sm font-medium">Uploading in background</span>
+                <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 bg-white border-2 border-blue-500 rounded-lg p-2 sm:p-4 shadow-lg z-50 max-w-[160px] sm:max-w-none">
+                    <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                        <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 animate-spin flex-shrink-0" />
+                        <span className="text-xs sm:text-sm font-medium truncate">Uploading...</span>
                     </div>
                     <div className="text-xs text-gray-600">
-                        {uploadState.stats.completed} / {uploadState.stats.total} completed
+                        {uploadState.stats.completed} / {uploadState.stats.total}
                     </div>
                     {speed && (
                         <div className="text-xs text-gray-600">
                             {formatFileSize(speed)}/s
                         </div>
                     )}
-                    <div className="mt-2">
-                        <div className="w-32 bg-gray-200 rounded-full h-1">
+                    <div className="mt-1 sm:mt-2">
+                        <div className="w-24 sm:w-32 bg-gray-200 rounded-full h-1">
                             <div
                                 className="bg-blue-600 h-1 rounded-full transition-all duration-300"
                                 style={{ width: `${overallProgress}%` }}

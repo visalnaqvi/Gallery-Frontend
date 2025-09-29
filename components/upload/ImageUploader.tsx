@@ -46,15 +46,17 @@ export default function ImageUploader() {
 
         return () => {
             // Cleanup script if needed
-            document.body.removeChild(script);
+            if (document.body.contains(script)) {
+                document.body.removeChild(script);
+            }
         };
     }, []);
 
     if (!session?.user?.id || !groupId) {
         return (
-            <div className="max-w-4xl mx-auto p-6">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <p className="text-yellow-800">
+            <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
+                    <p className="text-sm sm:text-base text-yellow-800">
                         {!session?.user?.id ? 'Please log in to upload images.' : 'No group selected.'}
                     </p>
                 </div>
@@ -63,33 +65,35 @@ export default function ImageUploader() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6 space-y-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">
+        <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-6 sm:py-8">
+            {/* Page Title */}
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 px-1">
                 Upload Images
             </h1>
 
-
-
-            {/* Direct File Upload Component */}
-            <div className="bg-white border rounded-lg p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Upload Images Directly
-                </h3>
-                <FileUpload
+            <div className="space-y-4 sm:space-y-6">
+                {/* Google Drive Import Component */}
+                <DriveImport
                     groupId={groupId}
                     userId={session.user.id}
-                    onUploadStart={handleUploadStart}
-                    onUploadComplete={handleUploadComplete}
+                    onImportStart={handleImportStart}
+                    onImportComplete={handleImportComplete}
                 />
-            </div>
+                {/* Direct File Upload Component */}
+                <div className="bg-white border rounded-lg p-3 sm:p-6 shadow-sm">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+                        Upload Images Directly
+                    </h3>
+                    <FileUpload
+                        groupId={groupId}
+                        userId={session.user.id}
+                        onUploadStart={handleUploadStart}
+                        onUploadComplete={handleUploadComplete}
+                    />
+                </div>
 
-            {/* Google Drive Import Component */}
-            <DriveImport
-                groupId={groupId}
-                userId={session.user.id}
-                onImportStart={handleImportStart}
-                onImportComplete={handleImportComplete}
-            />
+
+            </div>
         </div>
     );
 }
