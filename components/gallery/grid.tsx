@@ -22,11 +22,11 @@ type GalleryGridProps = {
 };
 
 export default function GalleryGrid({ handleImageClick, images, sorting, setSorting, groupId, personId, isPerson, isPublic, setMode, mode, loading }: GalleryGridProps) {
-    const [currentColumnIndex, setCurrentColumnIndex] = useState(0);
+    const [currentColumnIndex, setCurrentColumnIndex] = useState(3);
 
     // Get column options based on device type
     const getColumnOptions = () => {
-        if (isMobile) return [2, 3, 4]; // sm
+        if (isMobile) return [2, 3, 4, 5]; // sm
         if (isTablet) return [2, 4, 6, 8]; // md
         // Desktop - check window width for lg vs xl
         if (typeof window !== 'undefined' && window.innerWidth >= 1280) {
@@ -57,9 +57,30 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
     return (
         <>
             {/* Toolbar */}
-            <div className="flex justify-end items-center p-4">
-                {groupId && (
-                    <div className="flex justify-end items-center">
+            <div className="flex flex-col md:flex-row justify-between md:justify-end items-stretch md:items-center p-4 gap-2">
+                {/* Sorting Dropdown - First on mobile, Last on desktop */}
+                <div className="flex flex-col items-start bg-blue-100 rounded p-2 md:order-2">
+                    <label
+                        htmlFor="sort"
+                        className="text-xs font-medium text-gray-600 text-center ml-1"
+                    >
+                        Sort
+                    </label>
+                    <select
+                        id="sort"
+                        value={sorting}
+                        onChange={(e) => setSorting(e.target.value)}
+                        className="text-base font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 text-blue-800 cursor-pointer w-full"
+                    >
+                        <option className="bg-white text-sm font-normal" value="date_taken">Date Taken</option>
+                        <option className="bg-white text-sm font-normal" value="filename">Name</option>
+                        <option className="bg-white text-sm font-normal" value="uploaded_at">Upload Date</option>
+                    </select>
+                </div>
+
+                {/* Action Buttons - Second on mobile, First on desktop */}
+                <div className="flex flex-wrap gap-2 md:order-1">
+                    {groupId && (
                         <button
                             type="button"
                             onClick={onCopyLink}
@@ -68,10 +89,8 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                             <Share2 size={16} className="md:mr-2 mb-1" />
                             <span className="hidden md:block">Copy Link</span>
                         </button>
-                    </div>
-                )}
+                    )}
 
-                <div className="flex justify-end items-center ml-2">
                     <button
                         type="button"
                         onClick={handleColumnToggle}
@@ -81,10 +100,8 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                         <Grid3x3 size={16} className="md:mr-2" />
                         <span className="hidden md:block">{getCurrentColumns()}</span>
                     </button>
-                </div>
 
-                {mode && setMode && (
-                    <div className="flex justify-end items-center ml-2">
+                    {mode && setMode && (
                         <button
                             disabled={loading}
                             type="button"
@@ -100,11 +117,9 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                                 {mode === "gallery" ? "Bin" : "Gallery"}
                             </span>
                         </button>
-                    </div>
-                )}
+                    )}
 
-                {setMode && (
-                    <div className="flex justify-end items-center ml-2">
+                    {setMode && (
                         <button
                             disabled={loading}
                             type="button"
@@ -116,26 +131,7 @@ export default function GalleryGrid({ handleImageClick, images, sorting, setSort
                                 Highlights
                             </span>
                         </button>
-                    </div>
-                )}
-
-                <div className="flex flex-col items-start ml-2 bg-blue-100 rounded p-2">
-                    <label
-                        htmlFor="sort"
-                        className="text-xs font-medium text-gray-600 text-center ml-1"
-                    >
-                        Sort
-                    </label>
-                    <select
-                        id="sort"
-                        value={sorting}
-                        onChange={(e) => setSorting(e.target.value)}
-                        className="text-base font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 text-blue-800 cursor-pointer"
-                    >
-                        <option className="bg-white text-sm font-normal" value="date_taken">Date Taken</option>
-                        <option className="bg-white text-sm font-normal" value="filename">Name</option>
-                        <option className="bg-white text-sm font-normal" value="uploaded_at">Upload Date</option>
-                    </select>
+                    )}
                 </div>
             </div>
 
