@@ -153,6 +153,7 @@ export default function GalleryAlbums({ isPublic }: { isPublic: boolean }) {
                     groupId={groupId}
                     albums={albums}
                     getImageSource={getImageSource}
+                    totalCount={albumDetails?.total_images || 0}
                 />
             )}
         </>
