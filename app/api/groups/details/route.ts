@@ -8,11 +8,6 @@ const pool = new Pool({
 });
 
 export async function GET(req: NextRequest) {
-    // const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
-
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get('groupId');
 
@@ -24,7 +19,8 @@ export async function GET(req: NextRequest) {
     const client = await pool.connect();
  
     const groupQuery = await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, plan_type , access , created_at , delete_at
+      `SELECT id, name, profile_pic_bytes, total_images, total_size, admin_user, 
+              last_image_uploaded_at, plan_type, access, created_at, delete_at, invited_owner
        FROM groups
        WHERE id = $1`,
       [groupId]
@@ -34,21 +30,22 @@ export async function GET(req: NextRequest) {
 
     const formattedRows = groupQuery.rows.map((row) => ({
       id: row.id,
-      name:row.name , 
+      name: row.name,
       profile_pic_bytes: row.profile_pic_bytes
         ? `data:image/jpeg;base64,${Buffer.from(row.profile_pic_bytes).toString("base64")}`
         : "",
-        total_images:row.total_images,
-        total_size:row.total_size,
-        admin_user:row.admin_user,
-        last_image_uploaded_at:row.last_image_uploaded_at,
-        plan_type:row.plan_type,
-        access:row.access,
-        created_at:row.created_at,
-        delete_at:row.delete_at
+      total_images: row.total_images,
+      total_size: row.total_size,
+      admin_user: row.admin_user,
+      last_image_uploaded_at: row.last_image_uploaded_at,
+      plan_type: row.plan_type,
+      access: row.access,
+      created_at: row.created_at,
+      delete_at: row.delete_at,
+      invited_owner: row.invited_owner
     }));
 
-    return NextResponse.json( formattedRows , { status: 200 });
+    return NextResponse.json(formattedRows, { status: 200 });
   } catch (err) {
     console.error('Error fetching groups:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

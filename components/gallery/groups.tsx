@@ -38,7 +38,9 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         loaderRef,
 
         // Constants
-        LOAD_MORE_AHEAD
+        LOAD_MORE_AHEAD,
+        totalCount,
+        fetchTotalCount
     } = useGallery({
         groupId,
         mode: mode as "gallery",
@@ -51,7 +53,11 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
         resetState();
         fetchImages(0, true);
     }, [mode, resetState, groupId]);
-
+    useEffect(() => {
+        if (groupId) {
+            fetchTotalCount();
+        }
+    }, [groupId, mode, fetchTotalCount]);
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
@@ -118,6 +124,7 @@ export default function GalleryGroups({ isPublic }: { isPublic: boolean }) {
                     albums={albums}
                     groupId={groupId}
                     getImageSource={getImageSource}
+                    totalCount={totalCount}
                 />
             )}
         </>

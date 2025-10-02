@@ -7,12 +7,14 @@ declare module "next-auth" {
       email: string;
       name?: string | null;
       image?: string | null;
+      
     };
     accessToken?: string;   // 👈 add this
     refreshToken?: string; 
     
         accessTokenExpires?: number
     error?: string
+    is_master?:boolean
   }
 
   interface User {
@@ -31,5 +33,6 @@ declare module "next-auth/jwt" {
     refreshToken?: string; 
         accessTokenExpires?: number
     error?: string
+    is_master?:boolean
   }
 }

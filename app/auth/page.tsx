@@ -39,6 +39,8 @@ export default function AuthPage() {
                     </div>
                     <a href="/snapper/privacy-policy" className='text-white font-bold text-lg'>Read Our Privacy Policy</a>
                     <a href="/snapper/terms-of-service" className='text-white font-bold text-lg'>Read Our Terms of Service</a>
+                    <p className="fixed bottom-[10px] md:bottom-[50px] m-2 text-center">Need Help?<span className='text-blue-600 font-semibold'>Connect with us at +91-8920152023</span></p>
+
                     {/* Divider
                         <div className="flex items-center w-full max-w-sm my-6">
                             <div className="flex-grow border-t border-gray-300"></div>
@@ -76,7 +78,6 @@ export default function AuthPage() {
             </div>
             <br></br>
             <br></br>
-            <p className="fixed bottom-[10px] md:bottom-[50px] m-2 text-center">Not able to login? <span className='text-blue-600 font-semibold'>Connect with us at +91-8920152023</span></p>
 
         </div>
     );

@@ -70,7 +70,6 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
             console.error("Failed to fetch person details", err);
         }
     }, [personId]);
-
     // Effect to fetch person details when personId changes
     useEffect(() => {
         if (personId) {
@@ -235,6 +234,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
                     groupId={groupId}
                     albums={albums}
                     getImageSource={getImageSource}
+                    totalCount={personDetails?.totalImages || 0}
                 />
             )}
         </>

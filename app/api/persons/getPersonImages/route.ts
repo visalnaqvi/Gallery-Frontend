@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const personId = searchParams.get("personId");
     const page = parseInt(searchParams.get("page") || "0");
     const sorting = searchParams.get("sorting") || "date_taken";
-    const limit = 50; // Images per page
+    const limit = 100; // Images per page
 
     if (!groupId) {
       return NextResponse.json({ error: "Missing groupId" }, { status: 400 });

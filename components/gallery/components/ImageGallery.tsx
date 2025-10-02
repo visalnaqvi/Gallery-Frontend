@@ -30,6 +30,7 @@ type props = {
     getImageSource: (image: ImageItem) => string;
     albums: Album[];
     groupId: string;
+    totalCount: number;
 }
 
 export default function ImageGalleryComponent({
@@ -47,7 +48,8 @@ export default function ImageGalleryComponent({
     resetState,
     getImageSource,
     albums,
-    groupId
+    groupId,
+    totalCount
 }: props) {
     const [showIcons, setShowIcons] = useState(true);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -68,6 +70,7 @@ export default function ImageGalleryComponent({
     // Reduced window for better performance
     const IMMEDIATE_WINDOW = 5; // Images to load immediately around current
     const GALLERY_WINDOW = 10; // Total gallery items to create
+    const [isHightlightLoading, setIsHightlightLoading] = useState(false);
 
     // Priority-based preload function
     const preloadImage = useCallback((src: string, priority: 'high' | 'normal' = 'normal'): Promise<void> => {
@@ -501,6 +504,7 @@ export default function ImageGalleryComponent({
     const handleHighlightUpdate = useCallback(async () => {
         if (!currentImage?.id) return;
 
+        setIsHightlightLoading(true); // start loading
         try {
             const action = currentImage.highlight ? "remove" : "add";
             const res = await fetch(`/api/groups/images?imageId=${currentImage.id}&action=${action}`, {
@@ -542,8 +546,11 @@ export default function ImageGalleryComponent({
         } catch (err) {
             console.error("Error updating highlight:", err);
             alert("Something went wrong.");
+        } finally {
+            setIsHightlightLoading(false); // stop loading
         }
     }, [currentIndex, images, setImages, mode, resetState, fetchImages, setCurrentIndex, setIsOpen]);
+
 
     const handleRestoreImage = useCallback(async () => {
         if (!currentImage) return;
@@ -656,7 +663,7 @@ export default function ImageGalleryComponent({
             {/* Image counter */}
             <div className={`absolute top-4 left-4 z-50 text-white bg-black bg-opacity-50 px-3 py-1 rounded transition-all duration-300 ${showIcons ? 'opacity-100' : 'opacity-0'
                 }`}>
-                {currentIndex + 1} / {images.length}
+                {currentIndex + 1} / {totalCount}
             </div>
 
             {/* Custom Navigation Arrows */}
@@ -714,11 +721,19 @@ export default function ImageGalleryComponent({
                         handleHighlightUpdate();
                         resetHideTimer();
                     }}
-                    className="p-3 bg-gray-900 text-white rounded-full transition-colors duration-200 shadow-lg hover:bg-gray-700"
+                    disabled={isHightlightLoading} // disable while loading
+                    className={`p-3 rounded-full transition-colors duration-200 shadow-lg 
+        ${isHightlightLoading ? "bg-gray-700 cursor-not-allowed" : "bg-gray-900 hover:bg-gray-700"} 
+        text-white`}
                     title={currentImage?.highlight ? "Remove from favorites" : "Add to favorites"}
                 >
-                    <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
+                    {isHightlightLoading ? (
+                        <span className="loader w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    ) : (
+                        <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
+                    )}
                 </button>
+
 
                 {/* Add to Album icon */}
                 <button

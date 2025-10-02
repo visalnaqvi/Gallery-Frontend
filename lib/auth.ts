@@ -18,7 +18,7 @@ async function getUserByEmail(email: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      "SELECT id, email, password_hash FROM users WHERE email = $1",
+      "SELECT id, email, password_hash , is_master FROM users WHERE email = $1",
       [email]
     );
     if (result.rowCount === 0) return null;
@@ -174,6 +174,7 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.accessTokenExpires = expiresAt;
+        token.is_master = dbUser.is_master
       }
 
       // // Case: Credentials login
@@ -229,6 +230,7 @@ export const authOptions: NextAuthOptions = {
         session.refreshToken = token.refreshToken;
         session.accessTokenExpires = token.accessTokenExpires;
         session.error = token.error;
+        session.is_master = token.is_master;
       }
       return session;
     },

@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { getToken } from "next-auth/jwt";
-
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
@@ -19,7 +20,10 @@ export async function GET(req: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
   }
-
+          const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const client = await pool.connect();
     const userQuery = await client.query(
@@ -38,8 +42,13 @@ export async function GET(req: NextRequest) {
       client.release();
       return NextResponse.json({ groups: [] }, { status: 200 });
     }
-
-    const groupQuery = await client.query(
+    if (session.is_master && session.user.email !== process.env.MASTER_EMAIL) {
+      return NextResponse.json({ error: "NOT AUTHORIZED" }, { status: 401 });
+    }
+    const groupQuery = session.is_master && session.user.email == process.env.MASTER_EMAIL ? await client.query(
+      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access , delete_at
+       FROM groups order by id DESC`
+    ) : await client.query(
       `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access , delete_at
        FROM groups
        WHERE id = ANY($1) order by id DESC`,
@@ -97,7 +106,7 @@ if (profile_pic_bytes) {
 
     const result = await client.query(
       `INSERT INTO groups (name, admin_user, status, total_images, total_size , plan_type , access , profile_pic_bytes , created_at)
-       VALUES ($1, $2, 'heating', 0, 0 , $3 , $4 , $5 , NOW())
+       VALUES ($1, $2, 'heating', 0, 0 , 'pro' , $4 , $5 , NOW())
        RETURNING id`,
       [name, userId , planType , access , profilePicBuffer]
     );

@@ -142,7 +142,12 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     const isGroupExpanded = (groupId: number) => {
         return expandedGroups.has(groupId);
     };
-
+    function formatImages(count: number) {
+        if (count >= 1000) {
+            return (count / 1000).toFixed(count % 1000 === 0 ? 0 : 1) + 'k';
+        }
+        return count.toString();
+    }
     return (
         <aside
             className={`bg-blue-600 text-white flex flex-col transition-all duration-300 fixed left-0 top-16 bottom-0 z-10 shadow-lg ${isOpen ? "w-full md:w-72" : "w-0 overflow-hidden"
@@ -205,12 +210,12 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                                 <ChevronRight size={16} />
                                             )}
                                         </button>
-                                        <span className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
+                                        {/* <span className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
                                             }`}>
                                             {
                                                 group.access?.toLowerCase() == 'public' ? <Eye size={16} /> : <Lock size={16} />
                                             }
-                                        </span>
+                                        </span> */}
                                         <button
                                             onClick={() => handleGroupNavigation(group.id)}
                                             className={`font-medium truncate text-left flex-1 hover:text-blue-200 ${isActiveGroup(group.id) ? 'text-white font-semibold' : ''
@@ -221,10 +226,9 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                         </button>
                                     </div>
                                     <span
-                                        className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
-                                            }`}
+                                        className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'}`}
                                     >
-                                        {group.total_images} imgs
+                                        {formatImages(group.total_images)} imgs
                                     </span>
 
                                 </div>
@@ -276,7 +280,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                             <span>Similar Faces</span>
                                         </button>
 
-                                        <button
+                                        {session?.user.id && group.admin_user == parseInt(session?.user.id) && <button
                                             onClick={() => handleGroupNavigation(group.id, 'upload')}
                                             className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'upload')
                                                 ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
@@ -285,7 +289,7 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                                         >
                                             <Upload size={16} />
                                             <span>Upload Images</span>
-                                        </button>
+                                        </button>}
 
                                         <button
                                             onClick={() => handleGroupNavigation(group.id, 'settings')}

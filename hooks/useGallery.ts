@@ -55,6 +55,10 @@ interface UseGalleryReturn {
     
     // Constants
     LOAD_MORE_AHEAD: number;
+
+    totalCount: number;
+
+    fetchTotalCount: () => Promise<void>;
 }
 
 export default function useGallery({
@@ -88,7 +92,7 @@ export default function useGallery({
     const currentPersonIdRef = useRef<string | null | undefined>(null);
     const currentAlbumIdRef = useRef<string | null | undefined>(null);
     const currentSortingRef = useRef<string>("date_taken");
-    
+    const [totalCount, setTotalCount] = useState<number>(0);
     // Optimized preloading system - only for critical images
     const criticalPreloadedRef = useRef<Set<string>>(new Set());
     const getImageSource = useCallback((image: ImageItem): string => {
@@ -179,7 +183,19 @@ export default function useGallery({
                 return `/api/groups/images?groupId=${actualGroupId}&page=${actualPage}&sorting=${actualSorting}&mode=${mode}`;
         }
     }, [mode]);
-
+    const fetchTotalCount = useCallback(async () => {
+        if (!groupId) return;
+        
+        try {
+            const res = await fetch(`/api/groups/images/count?groupId=${groupId}&mode=${mode}`);
+            if (!res.ok) return;
+            
+            const data = await res.json();
+            setTotalCount(data.totalCount);
+        } catch (err) {
+            console.error("Failed to fetch total count:", err);
+        }
+    }, [groupId, mode]);
     // Fetch images with better state management
     const fetchImages = useCallback(async (currentPage?: number, resetImages?: boolean) => {
         const actualGroupId = currentGroupIdRef.current;
@@ -358,6 +374,9 @@ export default function useGallery({
         loaderRef,
         
         // Constants
-        LOAD_MORE_AHEAD
+        LOAD_MORE_AHEAD,
+
+            totalCount,
+            fetchTotalCount,
     };
 }

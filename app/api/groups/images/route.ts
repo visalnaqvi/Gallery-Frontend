@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const mode = searchParams.get("mode");
     const sorting = searchParams.get("sorting") || "uploaded_at"; // fallback
     const page = parseInt(searchParams.get("page") || "0", 10);
-    const limit = 50;
+    const limit = 100;
     const offset = page * limit;
 
     if (!groupId) {

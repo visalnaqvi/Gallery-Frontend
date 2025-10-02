@@ -126,7 +126,7 @@ export default function UserProfile() {
                     </label>
 
                     {/* Password */}
-                    <label className="block">
+                    {/* <label className="block">
                         <span className="font-medium mb-2 block">Password</span>
                         <div className="flex gap-2 items-center">
                             <input
@@ -144,10 +144,10 @@ export default function UserProfile() {
                                 {showPassword ? "Hide" : "Show"}
                             </button>
                         </div>
-                    </label>
+                    </label> */}
 
                     {/* Plan Type */}
-                    <label className="block">
+                    {/* <label className="block">
                         <span className="font-medium mb-2 block">Plan Type</span>
                         <select
                             disabled
@@ -159,24 +159,10 @@ export default function UserProfile() {
                             <option value="pro">Pro</option>
                             <option value="elite">Elite</option>
                         </select>
-                    </label>
+                    </label> */}
                 </form>
 
-                <div className="flex mt-4">
-                    <button
-                        type="button"
-                        onClick={handleSave}
-                        className="bg-blue-500 text-white px-4 py-2 rounded mr-2 cursor-pointer"
-                    >
-                        Save
-                    </button>
-                    <button
-                        onClick={() => signOut({ callbackUrl: "/auth" })}
-                        className="bg-red-500 text-white px-4 py-2 rounded cursor-pointer"
-                    >
-                        Logout
-                    </button>
-                </div>
+
             </div>
 
             <div>
@@ -221,7 +207,21 @@ export default function UserProfile() {
                     </div>
                 </div>
             </div>
-
+            <div className="flex mt-4">
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    className="bg-blue-500 text-white px-4 py-2 rounded mr-2 cursor-pointer"
+                >
+                    Save
+                </button>
+                <button
+                    onClick={() => signOut({ callbackUrl: "/auth" })}
+                    className="bg-red-500 text-white px-4 py-2 rounded cursor-pointer"
+                >
+                    Logout
+                </button>
+            </div>
             {/* Groups Section */}
             <div>
                 <h1 className="text-2xl font-bold mb-2">Your Groups</h1>
