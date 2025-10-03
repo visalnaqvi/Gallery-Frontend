@@ -60,7 +60,7 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     const [isLoading, setIsLoading] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [currentPath, setCurrentPath] = useState<FolderPath[]>([{ id: 'root', name: 'Shared with Me' }]);
+    const [currentPath, setCurrentPath] = useState<FolderPath[]>([{ id: 'root', name: 'Folders Shared with Snapper' }]);
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState<string | null>(null);
     const { data: session } = useSession();
@@ -72,7 +72,7 @@ export default function DriveImport({ groupId, userId, onImportStart, onImportCo
     const [stoppingImportIds, setStoppingImportIds] = useState<string[]>([]);
     const [folderCache, setFolderCache] = useState<FolderCache>({});
 
-    const serviceAccountEmail = "snapper@buttons-2dc4a.iam.gserviceaccount.com";
+    const serviceAccountEmail = process.env.NEXT_PUBLIC_GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL || "snapper-drive@snapper-gallery.iam.gserviceaccount.com";
 
     async function fetchCount() {
         try {
