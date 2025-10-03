@@ -6,6 +6,7 @@ import { ArchiveRestore, Download, HeartIcon, Info, Trash2, X, Plus, Check, Chev
 import { saveAs } from "file-saver";
 import { useSession } from "next-auth/react";
 import { isMobile } from "react-device-detect";
+import { CircleLoader } from "react-spinners";
 
 type Album = {
     id: number;
@@ -728,7 +729,7 @@ export default function ImageGalleryComponent({
                     title={currentImage?.highlight ? "Remove from favorites" : "Add to favorites"}
                 >
                     {isHightlightLoading ? (
-                        <span className="loader w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <CircleLoader size={20} color="#ffffff" />
                     ) : (
                         <HeartIcon fill={currentImage?.highlight ? "white" : ""} size={20} />
                     )}
