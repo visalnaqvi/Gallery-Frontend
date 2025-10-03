@@ -1,12 +1,17 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Camera, Users, Share2, Smartphone, FolderPlus, Download, Menu, X, ArrowRight, Star, Shield, Zap } from 'lucide-react';
+import { Palette, Camera, Users, Share2, Smartphone, FolderPlus, Download, Menu, X, ArrowRight, Star, Shield, Zap } from 'lucide-react';
 
 const HomePage = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const features = [
+        {
+            icon: <Palette className="w-8 h-8" />, // you can swap with a better icon if needed
+            title: "Personalized Branding",
+            description: "Customize your gallery with your own logos, themes, and styles to make it uniquely yours"
+        },
         {
             icon: <Users className="w-8 h-8" />,
             title: "Smart People Grouping",
@@ -33,6 +38,7 @@ const HomePage = () => {
             description: "Seamlessly import your photos directly from Google Drive with just a few clicks"
         }
     ];
+
 
     const testimonials = [
         {
