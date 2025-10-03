@@ -72,6 +72,7 @@ export default function ImageGalleryComponent({
     const IMMEDIATE_WINDOW = 5; // Images to load immediately around current
     const GALLERY_WINDOW = 10; // Total gallery items to create
     const [isHightlightLoading, setIsHightlightLoading] = useState(false);
+    const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
     // Priority-based preload function
     const preloadImage = useCallback((src: string, priority: 'high' | 'normal' = 'normal'): Promise<void> => {
@@ -483,22 +484,44 @@ export default function ImageGalleryComponent({
 
     const downloadCompressed = useCallback(async () => {
         try {
+            setIsDownloadLoading(true)
             let src;
             if (images[currentIndex].location_stripped) {
-                src = images[currentIndex].location_stripped
+                src = "stripped_" + images[currentIndex].id
             } else if (images[currentIndex].compressed_location_3k) {
-                src = images[currentIndex].compressed_location_3k
+                src = "compressed_3k_" + images[currentIndex].id
             } else if (images[currentIndex].compressed_location) {
-                src = images[currentIndex].compressed_location
+                src = "compressed_" + images[currentIndex].id
             } else {
                 return;
             }
-            const fileResp = await fetch(src);
-            const blob = await fileResp.blob();
-            saveAs(blob, images[currentIndex].filename || "image.jpg");
+            const res = await fetch(`/api/images/download/${src}`);
+
+            if (!res.ok) {
+                alert("Failed to download");
+                return;
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            // create hidden link
+            const a = document.createElement("a");
+            a.href = url;
+
+            a.download = images[currentIndex].filename || `image.jpg`;
+
+            document.body.appendChild(a);
+            a.click();
+
+            // cleanup
+            a.remove();
+            window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Download failed:", error);
             alert("Download not supported on this device.");
+        } finally {
+            setIsDownloadLoading(false)
         }
     }, [images, currentIndex]);
 
@@ -783,19 +806,18 @@ export default function ImageGalleryComponent({
                 )}
 
                 {/* Download Icon */}
-                {!isMobile && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            downloadCompressed();
-                            resetHideTimer();
-                        }}
-                        className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
-                        title="Download image"
-                    >
-                        <Download size={20} />
-                    </button>
-                )}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        downloadCompressed();
+                        resetHideTimer();
+                    }}
+                    className="p-3 bg-gray-900 text-white rounded-full hover:bg-gray-700 transition-colors duration-200 shadow-lg"
+                    title="Download image"
+                    disabled={isDownloadLoading}
+                >
+                    {isDownloadLoading ? <CircleLoader size={20} color="#ffffff" /> : <Download size={20} />}
+                </button>
             </div>
 
             {/* Delete Confirmation Modal */}

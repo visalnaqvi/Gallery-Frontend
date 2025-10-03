@@ -9,7 +9,7 @@ export async function GET(
     const { id } = await context.params;
 
     // Firebase path
-    const filePath = `compressed_${id}`;
+    const filePath = id;
     const bucket = storage.bucket();
     const file = bucket.file(filePath);
 
