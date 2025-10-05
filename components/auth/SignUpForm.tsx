@@ -3,16 +3,15 @@
 import { useState } from 'react';
 import { Mail, Lock, User, Phone, Calendar, Eye, EyeOff } from "lucide-react";
 import styles from "./styles.module.css";
-import InfoToast from '../infoToast';
 import { GridLoader } from 'react-spinners';
-
 
 type Props = {
     setMode: (value: string | ((prev: string) => string)) => void;
     setSignUpSuccess: (value: boolean | ((prev: boolean) => boolean)) => void;
+    onSignupSuccess: (userData: any) => void;
 };
 
-export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
+export default function SignupForm({ setMode, setSignUpSuccess, onSignupSuccess }: Props) {
     const [form, setForm] = useState({
         first_name: '',
         last_name: '',
@@ -23,8 +22,7 @@ export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
     });
     const [showPass, setShowPass] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
-
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(false);
 
     function validate() {
         const newErrors: { [key: string]: string } = {};
@@ -42,9 +40,10 @@ export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
 
     async function handleSignup(e: React.FormEvent) {
         e.preventDefault();
-        setLoading(true)
+        setLoading(true);
+
         if (!validate()) {
-            setLoading(false)
+            setLoading(false);
             return;
         }
 
@@ -57,7 +56,13 @@ export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
         const data = await res.json();
 
         if (res.ok) {
-            // redirect or reset form
+            // Pass user data to parent for selfie capture
+            onSignupSuccess({
+                email: form.email,
+                first_name: form.first_name,
+                last_name: form.last_name
+            });
+
             setForm({
                 first_name: '',
                 last_name: '',
@@ -67,23 +72,16 @@ export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
                 date_of_birth: '',
             });
             setErrors({});
-            setSignUpSuccess(true)
-            setMode("login")
-            setTimeout(() => {
-                setSignUpSuccess(false)
-            }, 5000)
         } else {
             setErrors({ api: data.error || "Signup failed" });
         }
-        setLoading(false)
+        setLoading(false);
     }
 
     return (
         <form onSubmit={handleSignup} className={styles.form}>
-
             <h2 className={styles.heading}>Hello,</h2>
             <h2 className={styles.heading}>Welcome to Snapper</h2>
-            {/* <p className={styles.tag}>Your new home for photos, stories, and memories.</p> */}
 
             {/* First Name */}
             <div className={styles.inputWrapper}>
@@ -175,15 +173,19 @@ export default function SignupForm({ setMode, setSignUpSuccess }: Props) {
             {/* API error */}
             {errors.api && <p className={styles.errorMsg}>{errors.api}</p>}
 
-            {loading ? <GridLoader
-                className="mr-4"
-                size={10}
-                color="#2b7fff"
-                aria-label="Loading Spinner"
-                data-testid="loader"
-            /> : <button type="submit" className={styles.submitBtn}>
-                Sign Up
-            </button>}
+            {loading ? (
+                <GridLoader
+                    className="mr-4"
+                    size={10}
+                    color="#2b7fff"
+                    aria-label="Loading Spinner"
+                    data-testid="loader"
+                />
+            ) : (
+                <button type="submit" className={styles.submitBtn}>
+                    Sign Up
+                </button>
+            )}
         </form>
     );
 }
