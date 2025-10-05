@@ -18,7 +18,7 @@ async function getUserByEmail(email: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      "SELECT id, email, password_hash , is_master FROM users WHERE email = $1",
+      "SELECT id, email, password_hash, is_master, face_image_bytes FROM users WHERE email = $1",
       [email]
     );
     if (result.rowCount === 0) return null;
@@ -34,7 +34,7 @@ async function createUserWithGoogle(email: string, firstName: string, lastName: 
     const result = await client.query(
       `INSERT INTO users (email, password_hash, first_name, last_name)
        VALUES ($1, 'google_signing', $2, $3)
-       RETURNING id, email, first_name, last_name`,
+       RETURNING id, email, first_name, last_name, face_image_bytes`,
       [email, firstName, lastName]
     );
     return result.rows[0];
@@ -88,7 +88,7 @@ async function refreshAccessToken(refreshToken: string) {
     return {
       accessToken: tokens.access_token,
       expiresAt: Math.floor(Date.now() / 1000) + tokens.expires_in,
-      refreshToken: tokens.refresh_token ?? refreshToken, // Google may not always return a new refresh token
+      refreshToken: tokens.refresh_token ?? refreshToken,
     };
   } catch (error) {
     console.error("Error refreshing access token:", error);
@@ -98,7 +98,6 @@ async function refreshAccessToken(refreshToken: string) {
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // ✅ Local credentials login
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -117,20 +116,23 @@ export const authOptions: NextAuthOptions = {
         );
         if (!isPasswordValid) return null;
 
-        return { id: user.id, email: user.email };
+        return { 
+          id: user.id, 
+          email: user.email,
+          hasFaceImage: !!user.face_image_bytes ,
+          is_master:user.is_master
+        };
       },
     }),
 
-    // ✅ Google login with Drive access
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope:
-            "openid email profile",
-          access_type: "offline", // get refresh_token
-          prompt: "consent", // force refresh_token on first login
+          scope: "openid email profile",
+          access_type: "offline",
+          prompt: "consent",
         },
       },
     }),
@@ -140,16 +142,29 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async redirect({ url, baseUrl }) {
-      // Always go to home page after login
       return baseUrl + "/";
     },
     
-    async jwt({ token, user, account, profile }) {
-      // Case: First login with Google
+    async jwt({ token, user, account, profile, trigger, session }) {
+      // CRITICAL: Handle session update trigger
+      if (trigger === "update" && session?.hasFaceImage) {
+        // Re-fetch user from database to get latest face_image_bytes status
+        if (token.email) {
+          const dbUser = await getUserByEmail(token.email);
+          if (dbUser) {
+            token.hasFaceImage = !!dbUser.face_image_bytes;
+          }
+        }
+        return token;
+      }
+
       let dbUser;
+      
+      // Google OAuth
       if (account?.provider === "google" && profile?.email) {
         dbUser = await getUserByEmail(profile.email);
         const googleProfile = profile as unknown as GoogleProfile;
+        
         if (!dbUser) {
           dbUser = await createUserWithGoogle(
             profile.email,
@@ -158,10 +173,8 @@ export const authOptions: NextAuthOptions = {
           );
         }
 
-        // Calculate expiry time (Google tokens typically expire in 3600 seconds)
         const expiresAt = Math.floor(Date.now() / 1000) + (account.expires_at ? account.expires_at : 3600);
 
-        // Update tokens in DB
         await updateGoogleTokens(
           dbUser.id,
           account.access_token!,
@@ -174,25 +187,26 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.accessTokenExpires = expiresAt;
-        token.is_master = dbUser.is_master
+        token.is_master = dbUser.is_master?true:false;
+        token.hasFaceImage = !!dbUser.face_image_bytes;
       }
 
-      // // Case: Credentials login
-      // if (user) {
-      //   token.id = user.id;
-      //   token.email = user.email;
-      // }
+      // Credentials login
+      if (user && account?.provider != "google") {
+        token.id = user.id;
+        token.email = user.email;
+        token.hasFaceImage = (user as any).hasFaceImage;
+        token.is_master = user.is_master?true:false;
+      }
 
-      // Check if we need to refresh the access token
+      // Token refresh logic
       if (token.accessToken && token.refreshToken && token.accessTokenExpires) {
-        // If token expires in the next 5 minutes, refresh it
         const shouldRefresh = Math.floor(Date.now() / 1000) > (token.accessTokenExpires as number) - 300;
         
         if (shouldRefresh) {
           try {
             const refreshedTokens = await refreshAccessToken(token.refreshToken as string);
             
-            // Update database with new tokens
             if (token.id) {
               await updateGoogleTokens(
                 token.id as string,
@@ -210,7 +224,6 @@ export const authOptions: NextAuthOptions = {
             };
           } catch (error) {
             console.error("Error refreshing token:", error);
-            // Return token as-is, but mark it as expired
             return {
               ...token,
               error: "RefreshAccessTokenError",
@@ -231,12 +244,13 @@ export const authOptions: NextAuthOptions = {
         session.accessTokenExpires = token.accessTokenExpires;
         session.error = token.error;
         session.is_master = token.is_master;
+        session.hasFaceImage = token.hasFaceImage as boolean;
       }
       return session;
     },
   },
   pages: {
-    signIn: "/", // your custom login page
+    signIn: "/",
   },
   secret: process.env.JWT_SECRET,
 };

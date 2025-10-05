@@ -15,9 +15,10 @@ export async function middleware(req: NextRequest) {
     '/api/persons/updateName',
     '/api/albums',
     '/api/albums/getAlbumImages',
-    '/api/groups/images/getAlbums'
+    '/api/groups/images/getAlbums',
+    '/profile'
+  ];
 
-  ]
   // ✅ Skip all public routes
   if (pathname.startsWith("/public/") || pathname.startsWith("/snapper/")) {
     return NextResponse.next();
@@ -32,7 +33,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if(publicPaths.includes(pathname)){
+  if (publicPaths.includes(pathname)) {
     return NextResponse.next();
   }
 
@@ -42,6 +43,14 @@ export async function middleware(req: NextRequest) {
   if (!token) {
     // Redirect to /auth if not authenticated
     return NextResponse.redirect(new URL("/auth", req.url));
+  }
+
+  // ✅ NEW: Check if user has face image (skip check for /verify-face itself)
+  const isVerifyFacePage = pathname === '/verify-face';
+  
+  if (!isVerifyFacePage && !token.hasFaceImage) {
+    // User is authenticated but hasn't uploaded face image
+    return NextResponse.redirect(new URL("/verify-face", req.url));
   }
 
   return NextResponse.next();

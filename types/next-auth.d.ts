@@ -13,8 +13,9 @@ declare module "next-auth" {
     refreshToken?: string; 
     
         accessTokenExpires?: number
-    error?: string
-    is_master?:boolean
+    error?: string;
+    is_master?:boolean;
+    hasFaceImage?:boolean;
   }
 
   interface User {
@@ -22,6 +23,8 @@ declare module "next-auth" {
     email: string;
     name?: string | null;
     image?: string | null;
+    hasFaceImage?: boolean;
+    is_master?:boolean;
   }
 }
 
@@ -31,8 +34,9 @@ declare module "next-auth/jwt" {
     email: string;
     accessToken?: string;   // 👈 add this
     refreshToken?: string; 
-        accessTokenExpires?: number
-    error?: string
-    is_master?:boolean
+        accessTokenExpires?: number;
+    error?: string;
+    is_master?:boolean;
+    hasFaceImage?: boolean;
   }
 }

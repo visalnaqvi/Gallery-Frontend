@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import "react-image-gallery/styles/css/image-gallery.css";
 import GalleryGrid from "@/components/gallery/grid";
-import { Pencil, Check, X } from "lucide-react";
+import { Pencil, Check, X, User, UserCircle } from "lucide-react";
 import InfoToast from "@/components/infoToast";
 import ImageGalleryComponent from "./components/ImageGallery";
 import useGallery from "@/hooks/useGallery";
@@ -13,7 +14,12 @@ interface Person {
     person_id: string;
     name: string;
     totalImages: number;
-    face_thumb_bytes: string; // base64 string
+    face_thumb_bytes: string;
+    user_id?: string;
+    first_name?: string;
+    last_name?: string;
+    is_current_user?: boolean;
+    is_claimed?: boolean;
 }
 
 export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
@@ -24,31 +30,24 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState("");
     const [sorting, setSorting] = useState<string>("date_taken");
+    const { data: session } = useSession();
 
     const {
-        // State
         images,
         setImages,
         hasMore,
         loading,
         isForbidden,
         albums,
-
-        // Gallery state
         isOpen,
         setIsOpen,
         currentIndex,
         setCurrentIndex,
-
-        // Functions
         handleImageClick,
         fetchImages,
         resetState,
         getImageSource,
-        // Refs
         loaderRef,
-
-        // Constants
         LOAD_MORE_AHEAD
     } = useGallery({
         groupId,
@@ -70,7 +69,7 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
             console.error("Failed to fetch person details", err);
         }
     }, [personId]);
-    // Effect to fetch person details when personId changes
+
     useEffect(() => {
         if (personId) {
             fetchPersonDetails();
@@ -94,6 +93,9 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
         }
     };
 
+    // Only allow editing if NOT claimed
+    const canEdit = !personDetails?.is_claimed;
+
     if (isForbidden) {
         return <InfoToast loading={false} message="Looks like you don't have access to this group. Contact group admin to get access." />;
     }
@@ -108,78 +110,114 @@ export default function GalleryPersons({ isPublic }: { isPublic: boolean }) {
         <>
             {/* Person Details Header */}
             {personDetails && (
-                <div className={"bg-blue-100 m-[10px] rounded-md flex items-center"}>
-                    <div>
-                        {personDetails.face_thumb_bytes ? (
-                            <img
-                                src={personDetails.face_thumb_bytes}
-                                alt={`Person ${personDetails.person_id}`}
-                                style={{
-                                    width: "100px",
-                                    height: "100px",
-                                    objectFit: "cover",
-                                    borderRadius: "8px",
-                                }}
-                            />
-                        ) : (
-                            <div
-                                style={{
-                                    width: "100px",
-                                    height: "100px",
-                                    background: "#eee",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    borderRadius: "8px",
-                                    fontSize: "0.8rem",
-                                    color: "#666",
-                                }}
-                            >
-                                No Image
-                            </div>
-                        )}
-                    </div>
-                    {/* Editable Name */}
-                    <div className="ml-[20px]">
-                        <div className="flex items-center justify-start gap-2">
-                            {isEditing ? (
-                                <>
-                                    <input
-                                        type="text"
-                                        value={editName}
-                                        onChange={(e) => setEditName(e.target.value)}
-                                        className="px-2 py-1 border rounded"
-                                    />
-                                    <button
-                                        onClick={handleSaveName}
-                                        className="text-green-600 hover:text-green-800"
-                                    >
-                                        <Check size={20} />
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setEditName(personDetails.name);
-                                            setIsEditing(false);
-                                        }}
-                                        className="text-red-600 hover:text-red-800"
-                                    >
-                                        <X size={20} />
-                                    </button>
-                                </>
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 m-3 md:m-4 rounded-xl shadow-md p-4 md:p-6">
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                        {/* Thumbnail */}
+                        <div className="relative flex-shrink-0">
+                            {personDetails.face_thumb_bytes ? (
+                                <img
+                                    src={personDetails.face_thumb_bytes}
+                                    alt={`${personDetails.name}'s photo`}
+                                    className="w-24 h-24 md:w-32 md:h-32 object-cover rounded-2xl border-4 border-white shadow-lg"
+                                />
                             ) : (
-                                <>
-                                    <p className="font-semibold text-[30px]">{personDetails.name}</p>
-                                    <button
-                                        onClick={() => setIsEditing(true)}
-                                        className="text-blue-600 hover:text-blue-800"
-                                    >
-                                        <Pencil size={18} />
-                                    </button>
-                                </>
+                                <div className="w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br from-gray-200 to-gray-300 rounded-2xl border-4 border-white shadow-lg flex items-center justify-center">
+                                    <User className="w-12 h-12 text-gray-400" />
+                                </div>
+                            )}
+
+                            {/* Status Badge */}
+                            {personDetails.is_current_user && (
+                                <div className="absolute -top-2 -right-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                                    You
+                                </div>
+                            )}
+                            {personDetails.is_claimed && !personDetails.is_current_user && (
+                                <div className="absolute -top-2 -right-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                                    Claimed
+                                </div>
                             )}
                         </div>
-                        <div>
-                            <p className="font-medium">Total Images: {personDetails.totalImages}</p>
+
+                        {/* Details */}
+                        <div className="flex-grow w-full md:w-auto">
+                            {/* Name Display - Editable only if NOT claimed */}
+                            <div className="flex items-center gap-2 mb-2">
+                                {isEditing ? (
+                                    <>
+                                        <input
+                                            type="text"
+                                            value={editName}
+                                            onChange={(e) => setEditName(e.target.value)}
+                                            className="px-3 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 flex-grow text-lg md:text-xl font-semibold"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={handleSaveName}
+                                            className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                                            title="Save"
+                                        >
+                                            <Check size={20} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setEditName(personDetails.name);
+                                                setIsEditing(false);
+                                            }}
+                                            className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                                            title="Cancel"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-800 flex items-center gap-2">
+                                            {personDetails.name}
+                                            {personDetails.is_claimed && (
+                                                <UserCircle className="w-6 h-6 md:w-7 md:h-7 text-purple-600" />
+                                            )}
+                                        </h1>
+                                        {canEdit && (
+                                            <button
+                                                onClick={() => setIsEditing(true)}
+                                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors"
+                                                title="Edit name"
+                                            >
+                                                <Pencil size={18} />
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Profile message for claimed users */}
+                            {personDetails.is_claimed && personDetails.is_current_user && (
+                                <div className="mb-3">
+                                    <p className="text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                        This is your profile. To change your name, please update it in your profile settings.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Stats */}
+                            <div className="flex flex-wrap gap-4 mt-3">
+                                <div className="bg-white px-4 py-2 rounded-lg shadow-sm">
+                                    <p className="text-sm text-gray-600">Total Images</p>
+                                    <p className="text-xl md:text-2xl font-bold text-blue-600">
+                                        {personDetails.totalImages}
+                                    </p>
+                                </div>
+
+                                {personDetails.is_claimed && (
+                                    <div className="bg-white px-4 py-2 rounded-lg shadow-sm">
+                                        <p className="text-sm text-gray-600">Status</p>
+                                        <p className="text-base md:text-lg font-semibold text-purple-600">
+                                            {personDetails.is_current_user ? 'Your Profile' : 'Claimed'}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

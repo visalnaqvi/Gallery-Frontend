@@ -1,317 +1,283 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from "react";
-import { Camera, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import { useRef, useState, useEffect } from 'react';
+import { Camera, CheckCircle2, XCircle, RotateCcw, Upload } from 'lucide-react';
 
-type Props = {
+interface SelfieCaptureProps {
     userEmail: string;
-    onComplete?: () => void;
-};
+    onComplete: () => void;
+    onError?: (error: string) => void;
+}
 
-export default function SelfieCapture({ userEmail, onComplete }: Props) {
-    const [stream, setStream] = useState<MediaStream | null>(null);
-    const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState(false);
-    const [faceDetected, setFaceDetected] = useState(false);
-
+export default function SelfieCapture({ userEmail, onComplete, onError }: SelfieCaptureProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-    const animationFrameRef = useRef<number>(null);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string>('');
+    const [isCameraReady, setIsCameraReady] = useState(false);
 
-    // ✅ Face detection using browser's API (if available)
-    const detectFace = async () => {
-        if (!videoRef.current || !overlayCanvasRef.current) return;
-
-        const video = videoRef.current;
-        const canvas = overlayCanvasRef.current;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        // Clear previous drawings
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Simple face position guide (oval shape in center)
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radiusX = canvas.width * 0.35;
-        const radiusY = canvas.height * 0.45;
-
-        // Draw guide oval
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = faceDetected ? "#10b981" : "#3b82f6";
-        ctx.lineWidth = 3;
-        ctx.setLineDash([10, 5]);
-        ctx.stroke();
-
-        // Draw corner markers
-        const drawCorner = (x: number, y: number, flipX: boolean, flipY: boolean) => {
-            const size = 20;
-            ctx.beginPath();
-            ctx.moveTo(x, y + (flipY ? -size : size));
-            ctx.lineTo(x, y);
-            ctx.lineTo(x + (flipX ? -size : size), y);
-            ctx.strokeStyle = faceDetected ? "#10b981" : "#3b82f6";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([]);
-            ctx.stroke();
+    useEffect(() => {
+        startCamera();
+        return () => {
+            stopCamera();
         };
+    }, []);
 
-        const margin = 40;
-        drawCorner(margin, margin, false, false); // Top-left
-        drawCorner(canvas.width - margin, margin, true, false); // Top-right
-        drawCorner(margin, canvas.height - margin, false, true); // Bottom-left
-        drawCorner(canvas.width - margin, canvas.height - margin, true, true); // Bottom-right
-
-        // Draw center crosshair
-        ctx.beginPath();
-        ctx.moveTo(centerX - 10, centerY);
-        ctx.lineTo(centerX + 10, centerY);
-        ctx.moveTo(centerX, centerY - 10);
-        ctx.lineTo(centerX, centerY + 10);
-        ctx.strokeStyle = faceDetected ? "#10b981" : "#6b7280";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([]);
-        ctx.stroke();
-
-        // Continue animation
-        animationFrameRef.current = requestAnimationFrame(detectFace);
-    };
-
-    // ✅ Start camera
     const startCamera = async () => {
         try {
-            setError(null);
             const mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "user",
                     width: { ideal: 720 },
                     height: { ideal: 1280 },
-                    aspectRatio: { ideal: 0.5625 } // 9:16 portrait
-                },
+                    facingMode: 'user'
+                }
             });
             setStream(mediaStream);
-
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream;
                 videoRef.current.onloadedmetadata = () => {
-                    if (overlayCanvasRef.current && videoRef.current) {
-                        overlayCanvasRef.current.width = videoRef.current.videoWidth;
-                        overlayCanvasRef.current.height = videoRef.current.videoHeight;
-                        detectFace();
-                    }
+                    setIsCameraReady(true);
                 };
             }
         } catch (err) {
-            setError("Unable to access camera. Please check permissions.");
-            console.error("Camera error:", err);
+            const error = 'Failed to access camera. Please ensure camera permissions are granted.';
+            setErrorMsg(error);
+            if (onError) onError(error);
         }
     };
 
-    // ✅ Stop camera
     const stopCamera = () => {
-        if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-        }
         if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
-            setStream(null);
-        }
-        if (videoRef.current) {
-            videoRef.current.srcObject = null;
+            stream.getTracks().forEach(track => track.stop());
         }
     };
 
-    // ✅ Capture selfie
-    const capturePhoto = () => {
-        if (!videoRef.current || !canvasRef.current) return;
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const imageData = canvas.toDataURL("image/jpeg", 0.9);
-        setCapturedImage(imageData);
-        stopCamera();
+    const captureImage = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/jpeg', 0.95);
+                setCapturedImage(imageData);
+                stopCamera();
+            }
+        }
     };
 
-    // ✅ Retake
-    const retakePhoto = () => {
+    const retake = () => {
         setCapturedImage(null);
-        setError(null);
-        setSuccess(false);
+        setErrorMsg('');
         startCamera();
     };
 
-    // ✅ Upload selfie
-    const uploadSelfie = async () => {
-        if (!capturedImage || !userEmail) {
-            setError("Missing image or email");
-            return;
-        }
+    const submitSelfie = async () => {
+        if (!capturedImage) return;
 
-        setLoading(true);
-        setError(null);
+        setIsLoading(true);
+        setErrorMsg('');
 
         try {
-            const response = await fetch("https://api.snappergallery.com/validate-selfie", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+            const response = await fetch('http://localhost:8000/validate-selfie', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     email: userEmail,
                     imageData: capturedImage,
-                    groupId: 13
                 }),
             });
 
             const data = await response.json();
 
-            if (!response.ok) {
-                setError(data.error || "Upload failed");
-                return;
+            if (response.ok && data.valid) {
+                onComplete();
+            } else {
+                const error = data.error || 'Validation failed. Please try again.';
+                setErrorMsg(error);
+                if (onError) onError(error);
+                setCapturedImage(null);
+                startCamera();
             }
-
-            setSuccess(true);
-            setTimeout(() => {
-                onComplete?.();
-            }, 1500);
         } catch (err) {
-            console.error(err);
-            setError("An error occurred during upload.");
+            const error = 'Network error. Please check your connection and try again.';
+            setErrorMsg(error);
+            if (onError) onError(error);
+            setCapturedImage(null);
+            startCamera();
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
-    // ✅ Cleanup on unmount
-    useEffect(() => {
-        startCamera();
-        return () => stopCamera();
-    }, []);
-
-    // Simulate face detection for demo
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setFaceDetected((prev) => !prev);
-        }, 2000);
-        return () => clearInterval(interval);
-    }, []);
-
     return (
-        <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6">
-            <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">
-                Capture Your Selfie
-            </h2>
-            <p className="text-gray-500 text-center mb-4">
-                Position your face within the frame
-            </p>
+        <div className="w-full max-w-md mx-auto">
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                {/* Camera/Preview Area - Fixed Height */}
+                <div className="relative bg-gray-900" style={{ height: 'calc(100vh - 400px)', maxHeight: '600px', minHeight: '400px' }}>
+                    {!capturedImage ? (
+                        <div className="relative w-full h-full">
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover"
+                            />
 
-            {/* Camera or captured image */}
-            <div className="relative mb-4 rounded-lg overflow-hidden border bg-black" style={{ aspectRatio: "9/16" }}>
-                {!capturedImage ? (
-                    <>
-                        <video
-                            ref={videoRef}
-                            autoPlay
-                            muted
-                            playsInline
+                            {/* Face Guide Overlay - SVG */}
+                            {isCameraReady && (
+                                <svg
+                                    className="absolute inset-0 w-full h-full pointer-events-none"
+                                    viewBox="0 0 100 100"
+                                    preserveAspectRatio="none"
+                                >
+                                    {/* Oval Guide */}
+                                    <ellipse
+                                        cx="50"
+                                        cy="45"
+                                        rx="30"
+                                        ry="38"
+                                        fill="none"
+                                        stroke="#60a5fa"
+                                        strokeWidth="0.5"
+                                        strokeDasharray="2,1"
+                                        opacity="0.8"
+                                    />
+
+                                    {/* Corner Markers - Top Left */}
+                                    <line x1="17" y1="7" x2="17" y2="15" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+                                    <line x1="17" y1="7" x2="25" y2="7" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+
+                                    {/* Corner Markers - Top Right */}
+                                    <line x1="83" y1="7" x2="83" y2="15" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+                                    <line x1="83" y1="7" x2="75" y2="7" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+
+                                    {/* Corner Markers - Bottom Left */}
+                                    <line x1="17" y1="83" x2="17" y2="75" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+                                    <line x1="17" y1="83" x2="25" y2="83" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+
+                                    {/* Corner Markers - Bottom Right */}
+                                    <line x1="83" y1="83" x2="83" y2="75" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+                                    <line x1="83" y1="83" x2="75" y2="83" stroke="#60a5fa" strokeWidth="0.8" strokeLinecap="round" />
+                                </svg>
+                            )}
+
+                            {!isCameraReady && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 bg-opacity-90">
+                                    <Camera className="w-16 h-16 text-blue-400 mb-4 animate-pulse" />
+                                    <p className="text-white text-lg font-medium">Initializing camera...</p>
+                                </div>
+                            )}
+
+                            {/* Instructions Overlay */}
+                            {isCameraReady && (
+                                <div className="absolute top-4 left-4 right-4">
+                                    <div className="bg-black bg-opacity-60 backdrop-blur-sm rounded-lg p-3">
+                                        <p className="text-white text-sm text-center font-medium">
+                                            Position your face within the oval guide
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Capture Button Overlay */}
+                            {isCameraReady && (
+                                <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+                                    <button
+                                        onClick={captureImage}
+                                        className="w-20 h-20 bg-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform duration-200 active:scale-95 border-4 border-blue-500"
+                                    >
+                                        <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
+                                            <Camera className="w-8 h-8 text-white" />
+                                        </div>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <img
+                            src={capturedImage}
+                            alt="Captured selfie"
                             className="w-full h-full object-cover"
                         />
-                        <canvas
-                            ref={overlayCanvasRef}
-                            className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                        />
-                        {/* Status indicator */}
-                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full bg-black bg-opacity-50 backdrop-blur-sm">
-                            <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${faceDetected ? 'bg-green-500' : 'bg-blue-500'} animate-pulse`}></div>
-                                <span className="text-white text-sm font-medium">
-                                    {faceDetected ? 'Face Detected' : 'Align your face'}
-                                </span>
-                            </div>
+                    )}
+                    <canvas ref={canvasRef} className="hidden" />
+                </div>
+
+                {/* Error Message */}
+                {errorMsg && (
+                    <div className="mx-4 mt-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+                        <div className="flex items-start gap-3">
+                            <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <p className="text-red-700 text-sm font-medium">{errorMsg}</p>
                         </div>
-                    </>
-                ) : (
-                    <img
-                        src={capturedImage}
-                        alt="Captured selfie"
-                        className="w-full h-full object-cover"
-                    />
-                )}
-                <canvas ref={canvasRef} className="hidden" />
-            </div>
-
-            {/* Guidelines */}
-            {!capturedImage && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                    <ul className="text-xs text-gray-600 space-y-1">
-                        <li>✓ Position your face in the center</li>
-                        <li>✓ Ensure good lighting</li>
-                        <li>✓ Remove glasses if possible</li>
-                        <li>✓ Look directly at the camera</li>
-                    </ul>
-                </div>
-            )}
-
-            {/* Error or Success messages */}
-            {error && (
-                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-3 text-sm">
-                    <XCircle size={18} />
-                    {error}
-                </div>
-            )}
-            {success && (
-                <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded mb-3 text-sm">
-                    <CheckCircle size={18} />
-                    Selfie uploaded successfully!
-                </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3">
-                {!capturedImage && (
-                    <button
-                        onClick={capturePhoto}
-                        disabled={!stream}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                    >
-                        <Camera size={20} />
-                        Capture
-                    </button>
-                )}
-
-                {capturedImage && !loading && (
-                    <>
-                        <button
-                            onClick={uploadSelfie}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                        >
-                            <CheckCircle size={20} />
-                            Upload
-                        </button>
-                        <button
-                            onClick={retakePhoto}
-                            className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                        >
-                            <RefreshCw size={20} />
-                            Retake
-                        </button>
-                    </>
-                )}
-
-                {loading && (
-                    <div className="flex-1 flex flex-col items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <p className="text-sm text-gray-600">Uploading...</p>
                     </div>
                 )}
+
+                {/* Action Buttons - Only show for captured image */}
+                {capturedImage && (
+                    <div className="p-6">
+                        <div className="flex gap-3">
+                            <button
+                                onClick={retake}
+                                disabled={isLoading}
+                                className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 transition-all duration-200"
+                            >
+                                <RotateCcw className="w-5 h-5" />
+                                Retake
+                            </button>
+                            <button
+                                onClick={submitSelfie}
+                                disabled={isLoading}
+                                className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Verifying...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload className="w-5 h-5" />
+                                        Submit
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Tips Section */}
+                <div className="px-6 pb-6">
+                    <div className="bg-blue-50 rounded-xl p-4">
+                        <h3 className="text-sm font-semibold text-blue-900 mb-2">Tips for best results:</h3>
+                        <ul className="space-y-1 text-xs text-blue-700">
+                            <li className="flex items-start gap-2">
+                                <span className="text-blue-500 mt-0.5">•</span>
+                                <span>Ensure good lighting on your face</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-blue-500 mt-0.5">•</span>
+                                <span>Look directly at the camera</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-blue-500 mt-0.5">•</span>
+                                <span>Remove glasses or hats if possible</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="text-blue-500 mt-0.5">•</span>
+                                <span>Position your face within the oval guide</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     );
