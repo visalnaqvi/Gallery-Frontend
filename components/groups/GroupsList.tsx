@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import styles from "./styles.module.css"
 import { useSession } from "next-auth/react";
 
-
 interface Group {
     id: number;
     name: string;
@@ -18,17 +17,22 @@ interface Group {
 }
 
 export default function GroupsList() {
-    const [groups, setGroups] = useState<Group[]>([]);
+    const [ownerGroups, setOwnerGroups] = useState<Group[]>([]);
+    const [adminGroups, setAdminGroups] = useState<Group[]>([]);
+    const [memberGroups, setMemberGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const router = useRouter()
+    const router = useRouter();
     const { data: session } = useSession();
+
     async function fetchGroups() {
         try {
             setLoading(true);
             const res = await fetch(`/api/groups?userId=${session?.user?.id}`);
             const data = await res.json();
-            setGroups(data.groups || []);
+            setOwnerGroups(data.ownerGroups || []);
+            setAdminGroups(data.adminGroups || []);
+            setMemberGroups(data.memberGroups || []);
         } catch (err) {
             console.error('Failed to fetch groups', err);
         } finally {
@@ -37,8 +41,54 @@ export default function GroupsList() {
     }
 
     useEffect(() => {
-        if (session?.user?.id) { fetchGroups(); }
+        if (session?.user?.id) {
+            fetchGroups();
+        }
     }, [session?.user?.id]);
+
+    const renderGroupCard = (group: Group, showUploadButton: boolean = false) => (
+        <div key={group.id} className={styles.groupCard}>
+            {
+                group.profile_pic_bytes == undefined || group.profile_pic_bytes == null || group.profile_pic_bytes == "" ?
+                    <div className={styles.groupImage} onClick={() => {
+                        router.push("/gallery-groups?groupId=" + group.id)
+                    }}>
+                        <div className={styles.innerWordWrapper}>{group.name.charAt(0)}</div>
+                    </div> :
+                    <div className={styles.cardThumWrapper} onClick={() => {
+                        router.push("/gallery-groups?groupId=" + group.id)
+                    }}>
+                        <img className={styles.img} src={group.profile_pic_bytes} alt="group image" />
+                    </div>
+            }
+            <div className={styles.groupDetails}>
+                <p className={styles.groupName}>{group.name}</p>
+                <p className={styles.groupData}>Images: {group.total_images}</p>
+                <div className='flex mt-2'>
+                    <button
+                        className="cursor-pointer bg-blue-500 mr-2 text-white px-2 py-1 rounded"
+                        onClick={() => {
+                            router.push("/gallery-groups?groupId=" + group.id)
+                        }}
+                    >
+                        View Images
+                    </button>
+                    {showUploadButton && (
+                        <div className={styles.adminPanel}>
+                            <button
+                                className="bg-blue-400 text-white px-2 py-1 rounded cursor-pointer"
+                                onClick={() => {
+                                    router.push(`/upload?groupId=${group.id}`)
+                                }}
+                            >
+                                Upload Images
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className={styles.mainWrapper}>
@@ -55,44 +105,52 @@ export default function GroupsList() {
             <div>
                 {loading ? (
                     <p>Loading...</p>
-                ) : groups.length === 0 ? (
-                    <p>No groups found.</p>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
-
-                        {groups.map(group => (
-                            <div key={group.id} className={styles.groupCard}>
-                                {
-                                    group.profile_pic_bytes == undefined || group.profile_pic_bytes == null || group.profile_pic_bytes == "" ?
-                                        <div className={styles.groupImage} onClick={() => {
-                                            router.push("/gallery-groups?groupId=" + group.id)
-                                        }}>
-                                            <div className={styles.innerWordWrapper}>{group.name.charAt(0)}</div>
-                                        </div> : <div className={styles.cardThumWrapper} onClick={() => {
-                                            router.push("/gallery-groups?groupId=" + group.id)
-                                        }}><img className={styles.img} src={group.profile_pic_bytes} alt="group image"></img></div>
-                                }
-                                <div className={styles.groupDetails}>
-                                    <p className={styles.groupName}>{group.name}</p>
-                                    <p className={styles.groupData}>Images: {group.total_images}</p>
-                                    <div className='flex mt-2'><button className="cursor-pointer bg-blue-500 mr-2 text-white px-2 py-1 rounded" onClick={() => {
-                                        router.push("/gallery-groups?groupId=" + group.id)
-                                    }}>View Images</button>
-                                        {group.admin_user == session?.user?.id &&
-                                            <div className={styles.adminPanel}>
-                                                <button className="bg-blue-400 text-white px-2 py-1 rounded cursor-pointer" onClick={() => {
-                                                    router.push(`/upload?groupId=${group.id}`)
-                                                }}>Upload Images</button>
-
-                                            </div>}</div>
+                    <>
+                        {/* Owner Groups Section */}
+                        {ownerGroups.length > 0 && (
+                            <div className="mb-8">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-700">
+                                    👑 Your Groups (Owner)
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
+                                    {ownerGroups.map(group => renderGroupCard(group, true))}
                                 </div>
-
                             </div>
-                        ))}
+                        )}
 
-                    </div>
+                        {/* Admin Groups Section */}
+                        {adminGroups.length > 0 && (
+                            <div className="mb-8">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-700">
+                                    🔧 Admin Groups
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
+                                    {adminGroups.map(group => renderGroupCard(group, true))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Member Groups Section */}
+                        {memberGroups.length > 0 && (
+                            <div className="mb-8">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-700">
+                                    👥 Member Groups
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
+                                    {memberGroups.map(group => renderGroupCard(group, false))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* No Groups Message */}
+                        {ownerGroups.length === 0 && adminGroups.length === 0 && memberGroups.length === 0 && (
+                            <p>No groups found.</p>
+                        )}
+                    </>
                 )}
             </div>
+
             {showModal && session?.user?.id && (
                 <CreateGroupModal
                     userId={session?.user?.id}

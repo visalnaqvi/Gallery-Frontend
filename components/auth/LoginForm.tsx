@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import styles from "./styles.module.css"
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { GridLoader } from 'react-spinners';
-
+import { getSession } from 'next-auth/react';
 export default function LoginForm() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -14,6 +14,7 @@ export default function LoginForm() {
     const [error, setError] = useState<{ email?: string; password?: string; login?: string }>({});
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+
 
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
@@ -34,7 +35,9 @@ export default function LoginForm() {
         });
 
         if (res?.ok) {
+
             router.push('/');
+
         } else {
             setError({ login: res?.error || "Invalid email or password" });
         }

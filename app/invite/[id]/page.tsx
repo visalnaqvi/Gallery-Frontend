@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import AuthPage from '@/components/authPage';
+import AuthPage from '@/components/auth/authPage';
 import InfoToast from '@/components/infoToast';
 
 export default function InvitePage({ params }: { params: { id: string } }) {
@@ -95,7 +95,7 @@ export default function InvitePage({ params }: { params: { id: string } }) {
                         </p>
                     </div>
                 </div>
-                <AuthPage />
+                <AuthPage inviteId={params.id} groupId={inviteData.group_id} />
             </div>
         );
     }

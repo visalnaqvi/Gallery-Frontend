@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import LoginForm from '@/components/auth/LoginForm';
 import SignupForm from '@/components/auth/SignUpForm';
-import styles from "./styles.module.css"
+import styles from "./styles-auth-page.module.css"
 import Image from 'next/image';
 import img from "../../public/login.png"
 import InfoToast from '@/components/infoToast';
@@ -11,7 +11,13 @@ import { signIn } from 'next-auth/react';
 import google from "../../public/google-icon-logo-svgrepo-com.svg"
 import logo from "../../public/logo-white.png"
 
-export default function AuthPage() {
+export default function AuthPage({
+    inviteId,
+    groupId
+}: {
+    inviteId?: string;
+    groupId?: string;
+}) {
     const [mode, setMode] = useState<string>('login'); // 'login' or 'signup'
     const [signUpSuccess, setSignUpSuccess] = useState(false);
 

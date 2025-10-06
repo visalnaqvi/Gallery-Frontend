@@ -9,7 +9,7 @@ import { Suspense, useState } from 'react';
 import { Menu, User } from "lucide-react";
 import { SideDrawer } from '@/components/SideDrawer';
 import Logo from '@/components/getLogo';
-
+import { signOut } from "next-auth/react";
 const montserrat = Montserrat({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800', '900'],
@@ -26,7 +26,8 @@ export default function RootLayout({
   const [drawerOpen, setDrawerOpen] = useState(true);
 
   const hideHeader = pathname.startsWith('/auth');
-  const isPublic = pathname.startsWith('/public') || pathname.startsWith('/snapper')
+  const isPublic = pathname.startsWith('/public') || pathname.startsWith('/snapper') || pathname.startsWith('/invite')
+  const isVerifyPage = pathname.startsWith('/verify-face')
   const isHomePage = pathname === '/';
 
   const handleNavigate = (target: string) => {
@@ -44,7 +45,7 @@ export default function RootLayout({
                 <header className="bg-blue-500 flex items-center justify-between p-4 fixed w-full z-20">
                   {/* Left: ham menu + logo */}
                   <div className="flex items-center gap-4">
-                    {!isHomePage && !isPublic && (
+                    {!isHomePage && !isPublic && !isVerifyPage && (
                       <button
                         onClick={() => setDrawerOpen(!drawerOpen)}
                         className="text-white hover:bg-blue-600 p-1 rounded"
@@ -56,16 +57,23 @@ export default function RootLayout({
                   </div>
 
                   {/* Right: user icon */}
-                  {!isPublic && <button
+                  {!isPublic && !isVerifyPage && <button
                     onClick={() => handleNavigate("/profile")}
                     className="text-white hover:text-gray-200 hover:bg-blue-600 p-2 rounded-full transition-colors"
                   >
                     <User size={24} />
                   </button>}
+
+                  {isVerifyPage && <button
+                    onClick={() => signOut({ callbackUrl: "/auth" })}
+                    className="text-white hover:text-gray-200 hover:bg-blue-600 p-2 rounded-full transition-colors"
+                  >
+                    Back to Sign In
+                  </button>}
                 </header>
 
                 {/* Sidebar Drawer - only show when not on home page */}
-                {!isHomePage && !isPublic && (
+                {!isHomePage && !isPublic && !isVerifyPage && (
                   <SideDrawer
                     isOpen={drawerOpen}
                     onClose={() => setDrawerOpen(false)}
@@ -74,7 +82,7 @@ export default function RootLayout({
 
                 {/* Main Content Area */}
                 <main
-                  className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && !isPublic && drawerOpen ? "ml-72" : "ml-0"
+                  className={`flex-1 overflow-y-auto pt-16 transition-all duration-300 ${!isHomePage && !isPublic && !isVerifyPage && drawerOpen ? "ml-72" : "ml-0"
                     }`}
                 >
                   {children}

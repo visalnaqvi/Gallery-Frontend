@@ -23,17 +23,39 @@ export async function POST(req: NextRequest) {
 
     const client = await pool.connect();
 
+    // Check if there's already an active invite link for this group
+    const checkQuery = `
+      SELECT id, group_id, created_at
+      FROM invite_links
+      WHERE group_id = $1 AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    const existingResult = await client.query(checkQuery, [groupId]);
+
+    // If active invite exists, return it
+    if (existingResult.rows.length > 0) {
+      client.release();
+      return NextResponse.json({
+        inviteId: existingResult.rows[0].id,
+        groupId: existingResult.rows[0].group_id,
+        createdAt: existingResult.rows[0].created_at,
+        isExisting: true,
+      }, { status: 200 });
+    }
+
     // Generate unique invite ID
-    const inviteId = nanoid(12); // Generates a 12-character unique ID
+    const inviteId = nanoid(12);
 
     // Insert into invite_links table
-    const query = `
+    const insertQuery = `
       INSERT INTO invite_links (id, group_id, created_by, created_at)
       VALUES ($1, $2, $3, NOW())
       RETURNING id, group_id, created_at
     `;
 
-    const result = await client.query(query, [inviteId, groupId, token.sub || token.id]);
+    const result = await client.query(insertQuery, [inviteId, groupId, token.sub || token.id]);
 
     client.release();
 
@@ -41,6 +63,7 @@ export async function POST(req: NextRequest) {
       inviteId: result.rows[0].id,
       groupId: result.rows[0].group_id,
       createdAt: result.rows[0].created_at,
+      isExisting: false,
     }, { status: 200 });
 
   } catch (err) {

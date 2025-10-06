@@ -5,29 +5,32 @@ import { v4 as uuidv4 } from 'uuid';
 import { getToken } from "next-auth/jwt";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+
 const pool = new Pool({
   connectionString: process.env.DATABASE,
 });
 
 export async function GET(req: NextRequest) {
-    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
+  
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
-  }
-          const session = await getServerSession(authOptions);
+
+
+  const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.id;
+
+    if (!userId) {
+    return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
+  }
   try {
     const client = await pool.connect();
+    
+    // Get user's groups and member_groups
     const userQuery = await client.query(
-      'SELECT groups FROM users WHERE id = $1',
+      'SELECT groups, member_groups FROM users WHERE id = $1',
       [userId]
     );
 
@@ -36,43 +39,84 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const groupIds: [] = userQuery.rows[0].groups;
+    const { groups, member_groups } = userQuery.rows[0];
+    const allGroupIds = [
+      ...(groups || []),
+      ...(member_groups || []),
+    ];
 
-    if (!groupIds || groupIds.length === 0) {
+    if (!allGroupIds || allGroupIds.length === 0) {
       client.release();
-      return NextResponse.json({ groups: [] }, { status: 200 });
+      return NextResponse.json({ 
+        ownerGroups: [], 
+        adminGroups: [], 
+        memberGroups: [] 
+      }, { status: 200 });
     }
+
     if (session.is_master && session.user.email !== process.env.MASTER_EMAIL) {
       return NextResponse.json({ error: "NOT AUTHORIZED" }, { status: 401 });
     }
-    const groupQuery = session.is_master && session.user.email == process.env.MASTER_EMAIL ? await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access , delete_at
-       FROM groups order by id DESC`
-    ) : await client.query(
-      `SELECT id, name,profile_pic_bytes, total_images, total_size, admin_user, last_image_uploaded_at, status , access , delete_at
-       FROM groups
-       WHERE id = ANY($1) order by id DESC`,
-      [groupIds]
-    );
+
+    // Fetch all groups
+    const groupQuery = session.is_master && session.user.email == process.env.MASTER_EMAIL 
+      ? await client.query(
+          `SELECT id, name, profile_pic_bytes, total_images, total_size, admin_user, 
+                  last_image_uploaded_at, status, access, delete_at
+           FROM groups ORDER BY id DESC`
+        )
+      : await client.query(
+          `SELECT id, name, profile_pic_bytes, total_images, total_size, admin_user, 
+                  last_image_uploaded_at, status, access, delete_at
+           FROM groups
+           WHERE id = ANY($1) ORDER BY id DESC`,
+          [allGroupIds]
+        );
 
     client.release();
 
-    const formattedRows = groupQuery.rows.map((row) => ({
+    const formatGroup = (row: any) => ({
       id: row.id,
-      name:row.name , 
+      name: row.name,
       profile_pic_bytes: row.profile_pic_bytes
         ? `data:image/jpeg;base64,${Buffer.from(row.profile_pic_bytes).toString("base64")}`
         : "",
-        total_images:row.total_images,
-        total_size:row.total_size,
-        admin_user:row.admin_user,
-        last_image_uploaded_at:row.last_image_uploaded_at,
-        status:row.status,
-      access:row.access,
-      delete_at:row.delete_at
-    }));
+      total_images: row.total_images,
+      total_size: row.total_size,
+      admin_user: row.admin_user,
+      last_image_uploaded_at: row.last_image_uploaded_at,
+      status: row.status,
+      access: row.access,
+      delete_at: row.delete_at
+    });
 
-    return NextResponse.json({ groups: formattedRows }, { status: 200 });
+    // Categorize groups
+    const ownerGroups: any[] = [];
+    const adminGroups: any[] = [];
+    const memberGroups: any[] = [];
+
+    groupQuery.rows.forEach((row) => {
+      const formattedGroup = formatGroup(row);
+      
+      // Owner: where admin_user matches userId
+      if (row.admin_user === userId) {
+        ownerGroups.push(formattedGroup);
+      }
+      // Admin: in users.groups but not owner
+      else if (groups && groups.includes(row.id)) {
+        adminGroups.push(formattedGroup);
+      }
+      // Member: in users.member_groups
+      else if (member_groups && member_groups.includes(row.id)) {
+        memberGroups.push(formattedGroup);
+      }
+    });
+
+    return NextResponse.json({ 
+      ownerGroups, 
+      adminGroups, 
+      memberGroups 
+    }, { status: 200 });
   } catch (err) {
     console.error('Error fetching groups:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -81,22 +125,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, userId , profile_pic_bytes , access , planType } = body;
+  const { name, userId, profile_pic_bytes, access, planType } = body;
   let profilePicBuffer = null;
-    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
-if (profile_pic_bytes) {
-  // If it's an array of numbers (e.g. [255, 216, 255, ...])
-  if (Array.isArray(profile_pic_bytes)) {
-    profilePicBuffer = Buffer.from(profile_pic_bytes);
+
+  if (profile_pic_bytes) {
+    if (Array.isArray(profile_pic_bytes)) {
+      profilePicBuffer = Buffer.from(profile_pic_bytes);
+    } else {
+      profilePicBuffer = Buffer.from(Object.values(profile_pic_bytes));
+    }
   }
-  // If it's an object with numeric keys (e.g. {0:255, 1:216,...})
-  else {
-    profilePicBuffer = Buffer.from(Object.values(profile_pic_bytes));
-  }
-}
+
   if (!name || !userId) {
     return NextResponse.json({ error: 'Invalid group name or userId' }, { status: 400 });
   }
@@ -105,10 +144,10 @@ if (profile_pic_bytes) {
     const client = await pool.connect();
 
     const result = await client.query(
-      `INSERT INTO groups (name, admin_user, status, total_images, total_size , plan_type , access , profile_pic_bytes , created_at)
-       VALUES ($1, $2, 'heating', 0, 0 , 'pro' , $4 , $5 , NOW())
+      `INSERT INTO groups (name, admin_user, status, total_images, total_size, plan_type, access, profile_pic_bytes, created_at)
+       VALUES ($1, $2, 'heating', 0, 0, 'pro', $3, $4, NOW())
        RETURNING id`,
-      [name, userId , planType , access , profilePicBuffer]
+      [name, userId, access, profilePicBuffer]
     );
 
     await client.query(
@@ -124,12 +163,7 @@ if (profile_pic_bytes) {
   }
 }
 
-// NEW METHOD: Update group status to "heating"
 export async function PATCH(req: NextRequest) {
-    //   const token = await getToken({ req, secret: process.env.JWT_SECRET });
-    // if (!token) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
   const body = await req.json();
   const { groupId } = body;
 
@@ -174,24 +208,17 @@ export async function DELETE(req: NextRequest) {
     }
 
     const client = await pool.connect();
-           const token = await getToken({ req, secret: process.env.JWT_SECRET });
-        if (!token) {
-        
-
-     
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-       
-
-          
-        }
+    const token = await getToken({ req, secret: process.env.JWT_SECRET });
+    
+    if (!token) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    
     try {
-      // update deleted_at = now + 24 hr
       await client.query(
-        `
-        UPDATE groups
-        SET delete_at = NOW() + interval '24 hours'
-        WHERE id = $1
-        `,
+        `UPDATE groups
+         SET delete_at = NOW() + interval '24 hours'
+         WHERE id = $1`,
         [groupId]
       );
 

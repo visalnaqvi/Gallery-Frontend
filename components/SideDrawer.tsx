@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { LayoutGrid, Users, ImageIcon, Copy, ChevronDown, ChevronRight, X, Settings, Upload, Eye, Lock, Folder } from "lucide-react";
 import logo from "../public/logo-white.png";
 import { useSession } from 'next-auth/react';
+
 interface Group {
     id: number;
     name: string;
@@ -17,19 +18,28 @@ interface Group {
     status: string;
 }
 
+interface GroupsData {
+    ownerGroups: Group[];
+    adminGroups: Group[];
+    memberGroups: Group[];
+}
+
 interface SideDrawerProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-
+type GroupRole = 'owner' | 'admin' | 'member';
 
 export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { data: session } = useSession()
-    const [groups, setGroups] = useState<Group[]>([]);
+    const { data: session } = useSession();
+
+    const [ownerGroups, setOwnerGroups] = useState<Group[]>([]);
+    const [adminGroups, setAdminGroups] = useState<Group[]>([]);
+    const [memberGroups, setMemberGroups] = useState<Group[]>([]);
     const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
     const [loading, setLoading] = useState(false);
 
@@ -38,15 +48,17 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
 
     // Fetch groups when drawer opens
     useEffect(() => {
-        if (isOpen && !isHomePage && groups.length === 0 && session?.user?.id) {
+        if (isOpen && !isHomePage && (ownerGroups.length === 0 && adminGroups.length === 0 && memberGroups.length === 0) && session?.user?.id) {
             fetchGroups();
         }
     }, [isOpen, isHomePage, session?.user?.id]);
+
     useEffect(() => {
         if (isOpen && window.innerWidth < 768) {
             onClose();
         }
     }, [pathname, groupId]);
+
     // Auto-expand only current group and collapse others
     useEffect(() => {
         if (groupId) {
@@ -67,8 +79,10 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
         setLoading(true);
         try {
             const response = await fetch('/api/groups?userId=' + session?.user?.id);
-            const data = await response.json();
-            setGroups(data.groups || []);
+            const data: GroupsData = await response.json();
+            setOwnerGroups(data.ownerGroups || []);
+            setAdminGroups(data.adminGroups || []);
+            setMemberGroups(data.memberGroups || []);
         } catch (error) {
             console.error('Failed to fetch groups:', error);
         } finally {
@@ -142,12 +156,151 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
     const isGroupExpanded = (groupId: number) => {
         return expandedGroups.has(groupId);
     };
+
     function formatImages(count: number) {
         if (count >= 1000) {
             return (count / 1000).toFixed(count % 1000 === 0 ? 0 : 1) + 'k';
         }
         return count.toString();
     }
+
+    const getGroupRole = (group: Group): GroupRole => {
+        if (ownerGroups.some(g => g.id === group.id)) return 'owner';
+        if (adminGroups.some(g => g.id === group.id)) return 'admin';
+        return 'member';
+    };
+
+    const renderGroupTabs = (group: Group, role: GroupRole) => {
+        return (
+            <div className="ml-6 border-l border-blue-500 pl-4 py-1">
+                {/* Images - All roles */}
+                <button
+                    onClick={() => handleGroupNavigation(group.id, 'images')}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'images')
+                        ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                        : 'hover:bg-blue-700 text-blue-100'
+                        }`}
+                >
+                    <ImageIcon size={16} />
+                    <span>Images</span>
+                </button>
+
+                {/* People - All roles */}
+                <button
+                    onClick={() => handleGroupNavigation(group.id, 'persons')}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'persons')
+                        ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                        : 'hover:bg-blue-700 text-blue-100'
+                        }`}
+                >
+                    <Users size={16} />
+                    <span>People</span>
+                </button>
+
+                {/* Albums - All roles */}
+                <button
+                    onClick={() => handleGroupNavigation(group.id, 'albums')}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'albums')
+                        ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                        : 'hover:bg-blue-700 text-blue-100'
+                        }`}
+                >
+                    <Folder size={16} />
+                    <span>Albums</span>
+                </button>
+
+                {/* Similar Faces - Owner only */}
+                {role === 'owner' && (
+                    <button
+                        onClick={() => handleGroupNavigation(group.id, 'similar-faces')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'similar-faces')
+                            ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                            : 'hover:bg-blue-700 text-blue-100'
+                            }`}
+                    >
+                        <Copy size={16} />
+                        <span>Similar Faces</span>
+                    </button>
+                )}
+
+                {/* Upload Images - Owner only */}
+                {role === 'owner' && (
+                    <button
+                        onClick={() => handleGroupNavigation(group.id, 'upload')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'upload')
+                            ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                            : 'hover:bg-blue-700 text-blue-100'
+                            }`}
+                    >
+                        <Upload size={16} />
+                        <span>Upload Images</span>
+                    </button>
+                )}
+
+                {/* Settings - Owner only */}
+                {role === 'owner' && (
+                    <button
+                        onClick={() => handleGroupNavigation(group.id, 'settings')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors ${isActiveTab(group.id, 'settings')
+                            ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
+                            : 'hover:bg-blue-700 text-blue-100'
+                            }`}
+                    >
+                        <Settings size={16} />
+                        <span>Settings</span>
+                    </button>
+                )}
+            </div>
+        );
+    };
+
+    const renderGroup = (group: Group, role: GroupRole) => (
+        <div key={group.id} className="mb-1">
+            {/* Group Header */}
+            <div
+                className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isActiveGroup(group.id)
+                    ? 'bg-blue-700 border-l-4 border-blue-300'
+                    : 'hover:bg-blue-700'
+                    }`}
+            >
+                <div className="flex items-center gap-2 flex-1">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleGroup(group.id);
+                        }}
+                        className="hover:bg-blue-800 p-1 rounded flex-shrink-0"
+                    >
+                        {isGroupExpanded(group.id) ? (
+                            <ChevronDown size={16} />
+                        ) : (
+                            <ChevronRight size={16} />
+                        )}
+                    </button>
+                    <button
+                        onClick={() => handleGroupNavigation(group.id)}
+                        className={`font-medium truncate text-left flex-1 hover:text-blue-200 ${isActiveGroup(group.id) ? 'text-white font-semibold' : ''
+                            }`}
+                        title={group.name}
+                    >
+                        {group.name}
+                    </button>
+                </div>
+                <span
+                    className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
+                        }`}
+                >
+                    {formatImages(group.total_images)} imgs
+                </span>
+            </div>
+
+            {/* Group Tabs */}
+            {isGroupExpanded(group.id) && renderGroupTabs(group, role)}
+        </div>
+    );
+
+    const allGroups = [...ownerGroups, ...adminGroups, ...memberGroups];
+
     return (
         <aside
             className={`bg-blue-600 text-white flex flex-col transition-all duration-300 fixed left-0 top-16 bottom-0 z-10 shadow-lg ${isOpen ? "w-full md:w-72" : "w-0 overflow-hidden"
@@ -170,9 +323,8 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                     <div className="flex items-center gap-2">
                         <LayoutGrid size={20} />
                         <h2 className="font-semibold text-lg">All Groups</h2>
-                        <br />
                         <button
-                            className="bg-white text-blue-500 p-2 rounded text-sm cursor-pointer"
+                            className="bg-white text-blue-500 p-2 rounded text-sm cursor-pointer ml-auto"
                             onClick={() => handleNavigate('/')}
                         >
                             View All
@@ -184,127 +336,40 @@ export function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                 <div className="py-2">
                     {loading ? (
                         <div className="px-4 py-3 text-blue-200">Loading groups...</div>
-                    ) : groups.length === 0 ? (
+                    ) : allGroups.length === 0 ? (
                         <div className="px-4 py-3 text-blue-200">No groups found</div>
                     ) : (
-                        groups.map((group) => (
-                            <div key={group.id} className="mb-1">
-                                {/* Group Header */}
-                                <div
-                                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isActiveGroup(group.id)
-                                        ? 'bg-blue-700 border-l-4 border-blue-300'
-                                        : 'hover:bg-blue-700'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleGroup(group.id);
-                                            }}
-                                            className="hover:bg-blue-800 p-1 rounded flex-shrink-0"
-                                        >
-                                            {isGroupExpanded(group.id) ? (
-                                                <ChevronDown size={16} />
-                                            ) : (
-                                                <ChevronRight size={16} />
-                                            )}
-                                        </button>
-                                        {/* <span className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'
-                                            }`}>
-                                            {
-                                                group.access?.toLowerCase() == 'public' ? <Eye size={16} /> : <Lock size={16} />
-                                            }
-                                        </span> */}
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id)}
-                                            className={`font-medium truncate text-left flex-1 hover:text-blue-200 ${isActiveGroup(group.id) ? 'text-white font-semibold' : ''
-                                                }`}
-                                            title={group.name}
-                                        >
-                                            {group.name}
-                                        </button>
+                        <>
+                            {/* Owner Groups Section */}
+                            {ownerGroups.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-blue-200 uppercase tracking-wide">
+                                        Your Groups
                                     </div>
-                                    <span
-                                        className={`text-xs ml-2 flex-shrink-0 ${isActiveGroup(group.id) ? 'text-blue-100' : 'text-blue-200'}`}
-                                    >
-                                        {formatImages(group.total_images)} imgs
-                                    </span>
-
+                                    {ownerGroups.map(group => renderGroup(group, 'owner'))}
                                 </div>
+                            )}
 
-                                {/* Group Tabs */}
-                                {isGroupExpanded(group.id) && (
-                                    <div className="ml-6 border-l border-blue-500 pl-4 py-1">
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id, 'images')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'images')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <ImageIcon size={16} />
-                                            <span>Images</span>
-                                        </button>
-
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id, 'persons')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'persons')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <Users size={16} />
-                                            <span>People</span>
-                                        </button>
-
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id, 'albums')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'albums')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <Folder size={16} />
-                                            <span>Albums</span>
-                                        </button>
-
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id, 'similar-faces')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'similar-faces')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <Copy size={16} />
-                                            <span>Similar Faces</span>
-                                        </button>
-
-                                        {session?.user.id && group.admin_user == parseInt(session?.user.id) && <button
-                                            onClick={() => handleGroupNavigation(group.id, 'upload')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors mb-1 ${isActiveTab(group.id, 'upload')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <Upload size={16} />
-                                            <span>Upload Images</span>
-                                        </button>}
-
-                                        <button
-                                            onClick={() => handleGroupNavigation(group.id, 'settings')}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded transition-colors ${isActiveTab(group.id, 'settings')
-                                                ? 'bg-blue-700 text-white shadow-md border-l-2 border-blue-200'
-                                                : 'hover:bg-blue-700 text-blue-100'
-                                                }`}
-                                        >
-                                            <Settings size={16} />
-                                            <span>Settings</span>
-                                        </button>
+                            {/* Admin Groups Section */}
+                            {adminGroups.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-blue-200 uppercase tracking-wide">
+                                        Admin Groups
                                     </div>
-                                )}
-                            </div>
-                        ))
+                                    {adminGroups.map(group => renderGroup(group, 'admin'))}
+                                </div>
+                            )}
+
+                            {/* Member Groups Section */}
+                            {memberGroups.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-blue-200 uppercase tracking-wide">
+                                        Member Groups
+                                    </div>
+                                    {memberGroups.map(group => renderGroup(group, 'member'))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

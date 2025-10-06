@@ -1,5 +1,5 @@
 'use client'
-import AuthPage from "@/components/authPage";
+import AuthPage from "@/components/auth/authPage";
 import { Suspense } from "react";
 
 export default function PersonPrivate() {

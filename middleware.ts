@@ -20,7 +20,7 @@ export async function middleware(req: NextRequest) {
   ];
 
   // ✅ Skip all public routes
-  if (pathname.startsWith("/public/") || pathname.startsWith("/snapper/")) {
+  if (pathname.startsWith("/public/") || pathname.startsWith("/snapper/") || pathname.startsWith("/invite/")) {
     return NextResponse.next();
   }
 
@@ -29,7 +29,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/api/auth")) {
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/invite")) {
     return NextResponse.next();
   }
 
@@ -46,12 +46,12 @@ export async function middleware(req: NextRequest) {
   }
 
   // ✅ NEW: Check if user has face image (skip check for /verify-face itself)
-  const isVerifyFacePage = pathname === '/verify-face';
+  // const isVerifyFacePage = pathname === '/verify-face';
   
-  if (!isVerifyFacePage && !token.hasFaceImage) {
-    // User is authenticated but hasn't uploaded face image
-    return NextResponse.redirect(new URL("/verify-face", req.url));
-  }
+  // if (!isVerifyFacePage && !token.hasFaceImage) {
+  //   // User is authenticated but hasn't uploaded face image
+  //   return NextResponse.redirect(new URL("/verify-face", req.url));
+  // }
 
   return NextResponse.next();
 }
