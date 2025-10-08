@@ -1,7 +1,6 @@
 // /app/api/images/signed-download-url/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { storage } from "@/lib/firebaseAdmin"; // ✅ import singleton
-import { getToken } from "next-auth/jwt";
+import { storage } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
   const { filename } = await req.json();

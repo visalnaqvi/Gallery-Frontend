@@ -6,7 +6,8 @@ import { useSession } from 'next-auth/react';
 import AuthPage from '@/components/auth/authPage';
 import InfoToast from '@/components/infoToast';
 
-export default function InvitePage({ params }: { params: { id: string } }) {
+export default async function InvitePage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
     const { data: session, status } = useSession();
     const router = useRouter();
     const [inviteData, setInviteData] = useState<any>(null);
@@ -17,7 +18,7 @@ export default function InvitePage({ params }: { params: { id: string } }) {
         const validateAndJoinGroup = async () => {
             try {
                 // Validate invite
-                const res = await fetch(`/api/invite-links/validate?inviteId=${params.id}`);
+                const res = await fetch(`/api/invite-links/validate?inviteId=${id}`);
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -34,7 +35,7 @@ export default function InvitePage({ params }: { params: { id: string } }) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            inviteId: params.id,
+                            inviteId: id,
                             userId: session.user.id
                         }),
                     });
@@ -58,7 +59,7 @@ export default function InvitePage({ params }: { params: { id: string } }) {
         if (status !== 'loading') {
             validateAndJoinGroup();
         }
-    }, [params.id, status, session, router]);
+    }, [id, status, session, router]);
 
     if (loading || status === 'loading') {
         return <InfoToast loading={true} message="Validating invite..." />;
@@ -95,7 +96,7 @@ export default function InvitePage({ params }: { params: { id: string } }) {
                         </p>
                     </div>
                 </div>
-                <AuthPage inviteId={params.id} groupId={inviteData.group_id} />
+                <AuthPage inviteId={id} groupId={inviteData.group_id} />
             </div>
         );
     }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Pool } from "pg";
-import { storage } from "@/lib/firebaseAdmin"; 
+import { Pool } from "pg"; 
 import { getToken } from "next-auth/jwt";
 
 // setup postgres connection

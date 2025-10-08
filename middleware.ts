@@ -16,7 +16,8 @@ export async function middleware(req: NextRequest) {
     '/api/albums',
     '/api/albums/getAlbumImages',
     '/api/groups/images/getAlbums',
-    '/profile'
+    '/profile',
+    '/download'
   ];
 
   // ✅ Skip all public routes
