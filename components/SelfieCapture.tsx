@@ -83,7 +83,7 @@ export default function SelfieCapture({ userEmail, onComplete, onError }: Selfie
         setErrorMsg('');
 
         try {
-            const response = await fetch('http://localhost:8000/validate-selfie', {
+            const response = await fetch('https://api.snappergallery.com/validate-selfie', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -2,13 +2,7 @@ import NextAuth from "next-auth";
 
 declare module "next-auth" {
   interface Session {
-    user: {
-      id: string;
-      email: string;
-      name?: string | null;
-      image?: string | null;
-      
-    };
+    user: User;
     accessToken?: string;   // 👈 add this
     refreshToken?: string; 
     
@@ -25,6 +19,7 @@ declare module "next-auth" {
     image?: string | null;
     hasFaceImage?: boolean;
     is_master?:boolean;
+    phoneNumber?:string;
   }
 }
 

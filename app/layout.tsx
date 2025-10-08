@@ -27,7 +27,7 @@ export default function RootLayout({
 
   const hideHeader = pathname.startsWith('/auth');
   const isPublic = pathname.startsWith('/public') || pathname.startsWith('/snapper') || pathname.startsWith('/invite')
-  const isVerifyPage = pathname.startsWith('/verify-face')
+  const isVerifyPage = pathname.startsWith('/verify')
   const isHomePage = pathname === '/';
 
   const handleNavigate = (target: string) => {

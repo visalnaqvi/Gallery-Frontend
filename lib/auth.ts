@@ -18,7 +18,7 @@ async function getUserByEmail(email: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      "SELECT id, email, password_hash, is_master, face_image_bytes FROM users WHERE email = $1",
+      "SELECT id, email, password_hash, is_master, face_image_bytes, phone_number FROM users WHERE email = $1",
       [email]
     );
     if (result.rowCount === 0) return null;
@@ -34,7 +34,7 @@ async function createUserWithGoogle(email: string, firstName: string, lastName: 
     const result = await client.query(
       `INSERT INTO users (email, password_hash, first_name, last_name)
        VALUES ($1, 'google_signing', $2, $3)
-       RETURNING id, email, first_name, last_name, face_image_bytes`,
+       RETURNING id, email, first_name, last_name, face_image_bytes, phone_number`,
       [email, firstName, lastName]
     );
     return result.rows[0];
@@ -119,8 +119,9 @@ export const authOptions: NextAuthOptions = {
         return { 
           id: user.id, 
           email: user.email,
-          hasFaceImage: !!user.face_image_bytes ,
-          is_master:user.is_master
+          hasFaceImage: !!user.face_image_bytes,
+          phoneNumber: user.phone_number,
+          is_master: user.is_master
         };
       },
     }),
@@ -147,12 +148,13 @@ export const authOptions: NextAuthOptions = {
     
     async jwt({ token, user, account, profile, trigger, session }) {
       // CRITICAL: Handle session update trigger
-      if (trigger === "update" && session?.hasFaceImage) {
-        // Re-fetch user from database to get latest face_image_bytes status
+      if (trigger === "update") {
+        // Re-fetch user from database to get latest status
         if (token.email) {
           const dbUser = await getUserByEmail(token.email);
           if (dbUser) {
             token.hasFaceImage = !!dbUser.face_image_bytes;
+            token.phoneNumber = dbUser.phone_number;
           }
         }
         return token;
@@ -187,16 +189,18 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.accessTokenExpires = expiresAt;
-        token.is_master = dbUser.is_master?true:false;
+        token.is_master = dbUser.is_master ? true : false;
         token.hasFaceImage = !!dbUser.face_image_bytes;
+        token.phoneNumber = dbUser.phone_number;
       }
 
       // Credentials login
-      if (user && account?.provider != "google") {
+      if (user && account?.provider !== "google") {
         token.id = user.id;
         token.email = user.email;
         token.hasFaceImage = (user as any).hasFaceImage;
-        token.is_master = user.is_master?true:false;
+        token.phoneNumber = (user as any).phoneNumber;
+        token.is_master = user.is_master ? true : false;
       }
 
       // Token refresh logic
@@ -239,6 +243,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
+        session.user.phoneNumber = token.phoneNumber as string | undefined;
         session.accessToken = token.accessToken;
         session.refreshToken = token.refreshToken;
         session.accessTokenExpires = token.accessTokenExpires;

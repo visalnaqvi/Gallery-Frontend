@@ -1,191 +1,150 @@
 'use client';
 
 import { useState } from 'react';
-import { Mail, Lock, User, Phone, Calendar, Eye, EyeOff } from "lucide-react";
-import styles from "./styles.module.css";
-import { GridLoader } from 'react-spinners';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
+import SignupStep1 from '@/components/auth/SignupStep1';
+import SignupStep2 from '@/components/auth/SignupStep2';
+import SignupStep3 from '@/components/auth/SignupStep3';
+import InfoToast from '@/components/infoToast';
+import Image from 'next/image';
+import logo from "@/public/logo-white.png";
 
-type Props = {
-    setMode: (value: string | ((prev: string) => string)) => void;
-    setSignUpSuccess: (value: boolean | ((prev: boolean) => boolean)) => void;
-    onSignupSuccess: (userData: any) => void;
-};
-
-export default function SignupForm({ setMode, setSignUpSuccess, onSignupSuccess }: Props) {
-    const [form, setForm] = useState({
-        first_name: '',
-        last_name: '',
+export default function SignupFlowPage() {
+    const router = useRouter();
+    const [step, setStep] = useState(1);
+    const [userData, setUserData] = useState({
         email: '',
-        phone_number: '',
-        password: '',
-        date_of_birth: '',
+        userId: ''
     });
-    const [showPass, setShowPass] = useState(false);
-    const [errors, setErrors] = useState<{ [key: string]: string }>({});
-    const [loading, setLoading] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
 
-    function validate() {
-        const newErrors: { [key: string]: string } = {};
+    const handleStep1Success = (data: { email: string; userId: string }) => {
+        setUserData(data);
+        setStep(2);
+    };
 
-        if (!form.first_name.trim()) newErrors.first_name = "First name is required";
-        if (!form.last_name.trim()) newErrors.last_name = "Last name is required";
-        if (!form.email.trim()) newErrors.email = "Email is required";
-        if (!form.phone_number.trim()) newErrors.phone_number = "Phone number is required";
-        if (!form.date_of_birth.trim()) newErrors.date_of_birth = "Date of birth is required";
-        if (!form.password.trim()) newErrors.password = "Password is required";
+    const handleStep2Success = () => {
+        setStep(3);
+    };
 
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    }
+    const handleStep3Success = async () => {
+        setShowSuccess(true);
 
-    async function handleSignup(e: React.FormEvent) {
-        e.preventDefault();
-        setLoading(true);
-
-        if (!validate()) {
-            setLoading(false);
-            return;
-        }
-
-        const res = await fetch('/api/auth/signup', {
-            method: 'POST',
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form),
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-            // Pass user data to parent for selfie capture
-            onSignupSuccess({
-                email: form.email,
-                first_name: form.first_name,
-                last_name: form.last_name
-            });
-
-            setForm({
-                first_name: '',
-                last_name: '',
-                email: '',
-                phone_number: '',
-                password: '',
-                date_of_birth: '',
-            });
-            setErrors({});
-        } else {
-            setErrors({ api: data.error || "Signup failed" });
-        }
-        setLoading(false);
-    }
+        // Auto-login after signup completion
+        setTimeout(async () => {
+            // You might want to auto-login here or just redirect to login
+            router.push('/auth');
+        }, 2000);
+    };
 
     return (
-        <form onSubmit={handleSignup} className={styles.form}>
-            <h2 className={styles.heading}>Hello,</h2>
-            <h2 className={styles.heading}>Welcome to Snapper</h2>
-
-            {/* First Name */}
-            <div className={styles.inputWrapper}>
-                <User className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    placeholder="First Name"
-                    value={form.first_name}
-                    onChange={e => setForm({ ...form, first_name: e.target.value })}
-                />
-            </div>
-            {errors.first_name && <p className={styles.errorMsg}>{errors.first_name}</p>}
-
-            {/* Last Name */}
-            <div className={styles.inputWrapper}>
-                <User className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    placeholder="Last Name"
-                    value={form.last_name}
-                    onChange={e => setForm({ ...form, last_name: e.target.value })}
-                />
-            </div>
-            {errors.last_name && <p className={styles.errorMsg}>{errors.last_name}</p>}
-
-            {/* Email */}
-            <div className={styles.inputWrapper}>
-                <Mail className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    placeholder="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                />
-            </div>
-            {errors.email && <p className={styles.errorMsg}>{errors.email}</p>}
-
-            {/* Phone Number */}
-            <div className={styles.inputWrapper}>
-                <Phone className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    placeholder="Phone Number"
-                    value={form.phone_number}
-                    onChange={e => setForm({ ...form, phone_number: e.target.value })}
-                />
-            </div>
-            {errors.phone_number && <p className={styles.errorMsg}>{errors.phone_number}</p>}
-
-            {/* Date of Birth */}
-            <div className={styles.inputWrapper}>
-                <Calendar className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    type="date"
-                    value={form.date_of_birth}
-                    onChange={e => setForm({ ...form, date_of_birth: e.target.value })}
-                />
-            </div>
-            {errors.date_of_birth && <p className={styles.errorMsg}>{errors.date_of_birth}</p>}
-
-            {/* Password */}
-            <div className={styles.inputWrapper} style={{ position: "relative" }}>
-                <Lock className={styles.inputIcon} size={18} />
-                <input
-                    className={styles.input}
-                    placeholder="Password"
-                    type={showPass ? "text" : "password"}
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                />
-                {showPass ? (
-                    <EyeOff
-                        className={styles.passToggle}
-                        size={18}
-                        onClick={() => setShowPass(false)}
+        <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-purple-600 flex items-center justify-center p-4">
+            {showSuccess && (
+                <div className='fixed top-4 right-4 left-4 sm:left-auto sm:right-8 sm:top-8 z-50 max-w-md'>
+                    <InfoToast
+                        loading={false}
+                        success={true}
+                        message='Account created successfully! Redirecting to login...'
                     />
-                ) : (
-                    <Eye
-                        className={styles.passToggle}
-                        size={18}
-                        onClick={() => setShowPass(true)}
-                    />
-                )}
-            </div>
-            {errors.password && <p className={styles.errorMsg}>{errors.password}</p>}
-
-            {/* API error */}
-            {errors.api && <p className={styles.errorMsg}>{errors.api}</p>}
-
-            {loading ? (
-                <GridLoader
-                    className="mr-4"
-                    size={10}
-                    color="#2b7fff"
-                    aria-label="Loading Spinner"
-                    data-testid="loader"
-                />
-            ) : (
-                <button type="submit" className={styles.submitBtn}>
-                    Sign Up
-                </button>
+                </div>
             )}
-        </form>
+
+            <div className="w-full max-w-6xl">
+                {/* Logo and Header */}
+                <div className="text-center mb-8">
+                    <Image
+                        src={logo}
+                        alt="Snapper Logo"
+                        width={200}
+                        height={60}
+                        className="mx-auto mb-4"
+                    />
+
+                    {/* Progress Indicator */}
+                    <div className="flex items-center justify-center gap-2 mb-8">
+                        {[1, 2, 3].map((s) => (
+                            <div key={s} className="flex items-center">
+                                <div
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${s < step
+                                        ? 'bg-green-400 text-white'
+                                        : s === step
+                                            ? 'bg-white text-blue-600'
+                                            : 'bg-white/30 text-white/60'
+                                        }`}
+                                >
+                                    {s < step ? '✓' : s}
+                                </div>
+                                {s < 3 && (
+                                    <div
+                                        className={`w-12 h-1 mx-1 ${s < step ? 'bg-green-400' : 'bg-white/30'
+                                            }`}
+                                    />
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="text-white text-sm font-medium">
+                        Step {step} of 3: {
+                            step === 1 ? 'Basic Information' :
+                                step === 2 ? 'Phone Verification' :
+                                    'Face Verification'
+                        }
+                    </div>
+                </div>
+
+                {/* Step Content */}
+                <div className="flex justify-center">
+                    {step === 1 && (
+                        <SignupStep1 onSuccess={handleStep1Success} />
+                    )}
+                    {step === 2 && (
+                        <SignupStep2
+                            userId={userData.userId}
+                            onSuccess={handleStep2Success}
+                            onBack={() => setStep(1)}
+                        />
+                    )}
+                    {step === 3 && (
+                        <SignupStep3
+                            userEmail={userData.email}
+                            userId={userData.userId}
+                            onSuccess={handleStep3Success}
+                            onBack={() => setStep(2)}
+                        />
+                    )}
+                </div>
+
+                {/* Footer Links */}
+                <div className="text-center mt-8 space-y-2">
+                    {step === 1 && (
+                        <p className="text-white text-sm">
+                            Already have an account?{' '}
+                            <button
+                                onClick={() => router.push('/')}
+                                className="text-blue-200 font-semibold hover:underline"
+                            >
+                                Log in
+                            </button>
+                        </p>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-blue-100 text-sm">
+                        <a href="/snapper/privacy-policy" className="hover:text-white transition">
+                            Privacy Policy
+                        </a>
+                        <span className="hidden sm:inline">•</span>
+                        <a href="/snapper/terms-of-service" className="hover:text-white transition">
+                            Terms of Service
+                        </a>
+                        <span className="hidden sm:inline">•</span>
+                        <a href="tel:+918920152023" className="hover:text-white transition">
+                            +91-8920152023
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }
