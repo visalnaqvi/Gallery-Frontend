@@ -6,8 +6,8 @@ import { useSession } from 'next-auth/react';
 import AuthPage from '@/components/auth/authPage';
 import InfoToast from '@/components/infoToast';
 
-export default async function InvitePage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params;
+export default function InvitePage({ params }: { params: { id: string } }) {
+    const { id } = params;
     const { data: session, status } = useSession();
     const router = useRouter();
     const [inviteData, setInviteData] = useState<any>(null);

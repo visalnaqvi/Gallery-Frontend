@@ -47,11 +47,9 @@ export async function POST(req: NextRequest) {
       // Update user's phone number
       await client.query(
         `UPDATE users 
-         SET phone_number = $1, 
-             firebase_uid = $2,
-             updated_at = NOW()
-         WHERE id = $3`,
-        [phone_number, firebase_uid, session.user.id]
+         SET phone_number = $1
+         WHERE id = $2`,
+        [phone_number, session.user.id]
       );
 
       return NextResponse.json({
